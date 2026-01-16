@@ -30,7 +30,10 @@ const fetchWithProxy = async (path) => {
   else if (path.includes('/waittime')) apiKey = API_KEYS.WAIT;
   else if (path.includes('/airportinfo/')) apiKey = API_KEYS.AIRPORT;
 
-  const headers = apiKey ? { 'Ocp-Apim-Subscription-Key': apiKey } : {};
+  const headers = {
+    'Accept': 'application/json',
+    ...(apiKey ? { 'Ocp-Apim-Subscription-Key': apiKey } : {})
+  };
 
   if (isProd) {
     // Pro-proxy via corsproxy.io
@@ -40,12 +43,11 @@ const fetchWithProxy = async (path) => {
     return await response.json();
   } else {
     // Lokal dev använder Vite-proxy
-    const localPath = path.startsWith('/flightinfo/v2')
-      ? `/swedavia-api${path.replace('/flightinfo/v2', '')}`
-      : `/swedavia-api-raw${path}`;
+    // Vi lägger bara till prefixet /swedavia-api så hanterar vite.config.js rewrite
+    const localPath = `/swedavia-api${path}`;
 
     const response = await fetch(localPath, { headers });
-    if (!response.ok) throw new Error('Network response failure');
+    if (!response.ok) throw new Error(`Network response failure: ${response.status}`);
     return await response.json();
   }
 };
@@ -55,7 +57,7 @@ export const swedaviaService = {
 
   getFlights: async (airportIata, type = 'arrivals') => {
     const today = new Date().toISOString().split('T')[0];
-    const path = `/flightinfo/v2/${airportIata}/${type}/sv/${today}`;
+    const path = `/flightinfo/v2/${airportIata}/${type}/${today}`;
     try {
       const jsonData = await fetchWithProxy(path);
       return (jsonData.flights || []).map(f => ({

@@ -7,22 +7,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/swedavia-api': {
-        target: 'https://www.swedavia.se/services/publicflightsboard/v3',
+        target: 'https://api.swedavia.se',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/swedavia-api/, ''),
-        headers: {
-          'Referer': 'https://www.swedavia.se/',
-          'Origin': 'https://www.swedavia.se'
-        }
-      },
-      '/swedavia-api-raw': {
-        target: 'https://www.swedavia.se',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/swedavia-api-raw/, ''),
-        headers: {
-          'Referer': 'https://www.swedavia.se/',
-          'Origin': 'https://www.swedavia.se'
-        }
       }
     }
   }

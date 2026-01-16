@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { swedaviaService } from '../services/swedaviaApi';
+import { FlightDetailsModal } from './FlightDetailsModal';
 
 const StatusBadge = ({ status }) => {
     const getStatusColor = () => {

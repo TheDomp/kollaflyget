@@ -56,7 +56,12 @@ export const AirportFacilities = ({ airportIata }) => {
                         <div key={i} className="glass-card" style={{ padding: '1rem', background: 'rgba(255,255,255,0.03)', fontSize: '0.9rem' }}>
                             <div style={{ fontWeight: '600', marginBottom: '0.3rem' }}>{item.name}</div>
                             <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-                                {item.location?.terminal ? `Terminal ${item.location.terminal}` : 'Information saknas'}
+                                {item.location?.terminalName ? (
+                                    <span>
+                                        {item.location.terminalName}
+                                        {item.location.place && <span style={{ opacity: 0.7 }}> • {item.location.place}</span>}
+                                    </span>
+                                ) : 'Information saknas'}
                             </div>
                             {item.openingHours && (
                                 <div style={{ fontSize: '0.7rem', marginTop: '0.5rem', color: 'var(--primary)' }}>
