@@ -14,6 +14,15 @@ export default defineConfig({
           'Referer': 'https://www.swedavia.se/',
           'Origin': 'https://www.swedavia.se'
         }
+      },
+      '/swedavia-api-raw': {
+        target: 'https://www.swedavia.se',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/swedavia-api-raw/, ''),
+        headers: {
+          'Referer': 'https://www.swedavia.se/',
+          'Origin': 'https://www.swedavia.se'
+        }
       }
     }
   }
