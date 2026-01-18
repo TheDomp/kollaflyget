@@ -229,14 +229,35 @@ export const FlightList = ({ flights, loading, title, error }) => {
     }, [flights, favorites]);
 
     // Render states
-    if (loading) return <LoadingState />;
+    // If loading but we have flights, show content with overlay
+    const showLoadingOverlay = loading && flights.length > 0;
+
+    // If loading and NO flights, show full loading state
+    if (loading && flights.length === 0) return <LoadingState />;
 
     if (error || (flights.length === 0 && title !== 'Välj flygplats för att se flyg')) {
         return <ErrorState error={error} />;
     }
 
     return (
-        <div className="flight-list-container fade-in" style={STYLES.container}>
+        <div className="flight-list-container fade-in" style={{ ...STYLES.container, position: 'relative', opacity: showLoadingOverlay ? 0.6 : 1, transition: 'opacity 0.3s ease' }}>
+            {showLoadingOverlay && (
+                <div
+                    data-testid="loading-overlay"
+                    style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 10,
+                    }}>
+                    <div style={STYLES.spinner} />
+                </div>
+            )}
             <h2 style={STYLES.title}>{title}</h2>
 
             <div style={STYLES.grid}>

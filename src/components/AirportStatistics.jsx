@@ -5,6 +5,7 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { COUNTRY_MAPPING, DESTINATION_COORDS, AIRPORTS } from '../services/swedaviaApi';
+import FlightMap from './FlightMap';
 
 // ============================================================================
 // CONSTANTS
@@ -541,8 +542,35 @@ export const AirportStatistics = ({
                 </div>
             ) : (
                 <>
-                    {/* Route Map */}
-                    <RouteMap originIata={airportIata} flights={filteredFlights} />
+                    {/* Route Map (Leaflet) */}
+                    <div className="glass-card" style={{ padding: '0', marginBottom: '2rem', borderRadius: 12, overflow: 'hidden' }}>
+                        <div style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>
+                            <h3 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-dim)' }}>FLYGRUTTER FRÅN {airportIata}</h3>
+                        </div>
+                        <FlightMap
+                            origin={DESTINATION_COORDS[airportIata]}
+                            originIata={airportIata}
+                            destinations={
+                                // Prepare data for map
+                                (() => {
+                                    const counts = filteredFlights.reduce((acc, f) => {
+                                        const dest = f.type === 'Arrival' ? f.originIata : f.destinationIata;
+                                        if (dest && dest !== airportIata && DESTINATION_COORDS[dest]) {
+                                            acc[dest] = (acc[dest] || 0) + 1;
+                                        }
+                                        return acc;
+                                    }, {});
+                                    const max = Math.max(...Object.values(counts), 1);
+                                    return Object.entries(counts).map(([iata, count]) => ({
+                                        iata,
+                                        count,
+                                        ...DESTINATION_COORDS[iata],
+                                        popularity: count / max
+                                    }));
+                                })()
+                            }
+                        />
+                    </div>
 
                     {/* Stats Cards */}
                     <div style={STYLES.statsGrid}>

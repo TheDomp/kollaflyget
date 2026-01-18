@@ -260,13 +260,28 @@ function App() {
     const newDate = e.target.value;
     setStartDate(newDate);
     if (newDate > endDate) setEndDate(newDate); // Ensure end >= start
-    if (currentAirport) handleAirportSelect(currentAirport, newDate, newDate > endDate ? newDate : endDate);
+
+    if (currentAirport) {
+      handleAirportSelect(currentAirport, newDate, newDate > endDate ? newDate : endDate).then(() => {
+        // Wait for render to stabilize then scroll
+        setTimeout(() => {
+          document.getElementById('airport-stats')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 100);
+      });
+    }
   }, [currentAirport, endDate, handleAirportSelect]);
 
   const handleEndDateChange = useCallback((e) => {
     const newDate = e.target.value;
     setEndDate(newDate);
-    if (currentAirport) handleAirportSelect(currentAirport, startDate, newDate);
+    if (currentAirport) {
+      handleAirportSelect(currentAirport, startDate, newDate).then(() => {
+        // Wait for render to stabilize then scroll
+        setTimeout(() => {
+          document.getElementById('airport-stats')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 100);
+      });
+    }
   }, [currentAirport, startDate, handleAirportSelect]);
 
   /**
@@ -367,7 +382,7 @@ function App() {
             />
           )}
 
-          {currentAirport && !loading && (
+          {currentAirport && (
             <>
               <AirportMap airportIata={currentAirport} />
               <AirportFacilities airportIata={currentAirport} />
