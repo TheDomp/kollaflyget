@@ -98,6 +98,22 @@ export const DESTINATION_COORDS = Object.freeze({
   'EWR': { lat: 40.6895, lng: -74.1745 },// Newark
   'ORD': { lat: 41.9742, lng: -87.9073 },// Chicago
   'LAX': { lat: 33.9416, lng: -118.4085 },// Los Angeles
+  'SFO': { lat: 37.6213, lng: -122.3790 },// San Francisco
+  'MIA': { lat: 25.7959, lng: -80.2870 }, // Miami
+  'GRU': { lat: -23.4356, lng: -46.4731 },// Sao Paulo
+  'EZE': { lat: -34.8150, lng: -58.5348 },// Buenos Aires
+  'JNB': { lat: -26.1367, lng: 28.2411 }, // Johannesburg
+  'CPT': { lat: -33.9715, lng: 18.6021 }, // Cape Town
+  'SYD': { lat: -33.9399, lng: 151.1753 },// Sydney
+  'MEL': { lat: -37.6690, lng: 144.8410 },// Melbourne
+  'HND': { lat: 35.5494, lng: 139.7798 }, // Tokyo
+  'PEK': { lat: 40.0799, lng: 116.6031 }, // Beijing
+  'HKG': { lat: 22.3080, lng: 113.9185 }, // Hong Kong
+  'SIN': { lat: 1.3644, lng: 103.9915 },  // Singapore
+  'ICN': { lat: 37.4602, lng: 126.4407 }, // Seoul
+  'DEL': { lat: 28.5562, lng: 77.1000 },  // Delhi
+  'DXB': { lat: 25.2532, lng: 55.3657 },  // Dubai
+  'DOH': { lat: 25.2731, lng: 51.6081 },  // Doha
 });
 
 /** @private */
@@ -343,6 +359,37 @@ export const swedaviaService = {
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(favs));
     return favs;
+  },
+
+  /**
+   * Fetches flight data for a date range.
+   * @param {string} airportIata - Airport IATA code.
+   * @param {'arrivals'|'departures'} type - Flight type.
+   * @param {string} startDate - Start date (YYYY-MM-DD).
+   * @param {string} endDate - End date (YYYY-MM-DD).
+   * @returns {Promise<Object[]>} Aggregated flight array.
+   */
+  getFlightsInRange: async (airportIata, type, startDate, endDate) => {
+    const dates = [];
+    let current = new Date(startDate);
+    const end = new Date(endDate);
+
+    // Limit to 7 days to avoid API abuse
+    let count = 0;
+    while (current <= end && count < 7) {
+      dates.push(new Date(current).toISOString().split('T')[0]);
+      current.setDate(current.getDate() + 1);
+      count++;
+    }
+
+    try {
+      const promises = dates.map(date => swedaviaService.getFlights(airportIata, type, date));
+      const results = await Promise.all(promises);
+      return results.flat();
+    } catch (error) {
+      console.error('Error fetching flight range:', error);
+      throw error;
+    }
   },
 
   /**

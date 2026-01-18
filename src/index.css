@@ -4,11 +4,11 @@
   /* Dynamic Theme Variables (Default: Day) */
   --primary-h: 217;
   --primary-s: 91%;
-  --primary-l: 60%;
+  --primary-l: 35%;
 
   --primary: hsl(var(--primary-h), var(--primary-s), var(--primary-l));
-  --primary-dark: hsl(var(--primary-h), var(--primary-s), 45%);
-  --primary-light: hsl(var(--primary-h), var(--primary-s), 75%);
+  --primary-dark: hsl(var(--primary-h), var(--primary-s), 30%);
+  --primary-light: hsl(var(--primary-h), var(--primary-s), 65%);
 
   --bg-dark: hsl(222, 47%, 18%);
   --bg-darker: hsl(222, 47%, 12%);
@@ -32,7 +32,7 @@
 .theme-night {
   --primary-h: 240;
   --primary-s: 85%;
-  --primary-l: 50%;
+  --primary-l: 48%;
   --bg-dark: hsl(240, 50%, 8%);
   --bg-darker: hsl(240, 50%, 4%);
   --bg-gradient: radial-gradient(circle at 80% 20%, hsla(var(--primary-h), var(--primary-s), 15%, 0.3) 0%, transparent 50%);

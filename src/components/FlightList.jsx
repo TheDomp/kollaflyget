@@ -79,6 +79,7 @@ const ErrorState = ({ error }) => (
 const FavoriteButton = React.memo(({ isFavorite, onClick }) => (
     <button
         onClick={onClick}
+        className="favorite-btn"
         style={{
             background: 'none',
             border: 'none',

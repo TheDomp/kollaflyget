@@ -134,7 +134,7 @@ export const SearchCard = ({ onSearch, onAirportSelect }) => {
             {/* Airport Selector */}
             <div style={STYLES.selectContainer}>
                 <label style={STYLES.label}>Välj en flygplats</label>
-                <select value={selectedAirport} onChange={handleAirportChange} style={STYLES.select}>
+                <select value={selectedAirport} onChange={handleAirportChange} style={STYLES.select} aria-label="Välj flygplats">
                     <option value="">-- Välj flygplats --</option>
                     {AIRPORTS.map((airport) => (
                         <option key={airport.iata} value={airport.iata}>
@@ -159,6 +159,7 @@ export const SearchCard = ({ onSearch, onAirportSelect }) => {
                         placeholder="t.ex. London, Spanien eller SK160"
                         value={searchQuery}
                         onChange={handleQueryChange}
+                        aria-label="Sök stad, land eller flyg-ID"
                         style={STYLES.input}
                     />
                 </div>
@@ -168,6 +169,7 @@ export const SearchCard = ({ onSearch, onAirportSelect }) => {
                         type="date"
                         value={searchDate}
                         onChange={handleDateChange}
+                        aria-label="Välj sökdatum"
                         style={STYLES.input}
                     />
                 </div>

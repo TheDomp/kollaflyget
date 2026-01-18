@@ -211,9 +211,18 @@ const ProgressItem = React.memo(({ label, count, maxCount, color = 'var(--primar
 ProgressItem.displayName = 'ProgressItem';
 
 /**
- * Interactive Flight Route Map
+ * Interactive Flight Route Map with Tooltips and World Projection
  */
 const RouteMap = React.memo(({ originIata, flights }) => {
+    const [hoveredRoute, setHoveredRoute] = useState(null);
+    const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+
+    // World Map Projection (Equirectangular) mapping to 800x450
+    const getPos = useCallback((lat, lng) => ({
+        x: (lng + 180) * (800 / 360),
+        y: (90 - lat) * (450 / 180),
+    }), []);
+
     const origin = useMemo(() => DESTINATION_COORDS[originIata], [originIata]);
 
     const routes = useMemo(() => {
@@ -233,53 +242,81 @@ const RouteMap = React.memo(({ originIata, flights }) => {
                 const coords = DESTINATION_COORDS[iata];
                 if (!coords) return null;
 
-                // Simple mercator-ish projection
-                const getPos = (lat, lng) => ({
-                    x: ((lng + 30) / 100) * 800, // Focus on Europe/MidEast
-                    y: ((75 - lat) / 50) * 450,
-                });
-
                 const start = getPos(origin.lat, origin.lng);
                 const end = getPos(coords.lat, coords.lng);
 
                 // Curve calculation
+                const dx = end.x - start.x;
+                const dy = end.y - start.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
                 const midX = (start.x + end.x) / 2;
-                const midY = (start.y + end.y) / 2 - Math.abs(start.x - end.x) * 0.2;
+                const midY = (start.y + end.y) / 2 - dist * 0.2; // Arc height based on distance
 
-                // Color based on popularity
                 const popularity = count / maxCount;
-                const color = popularity > 0.7
-                    ? '#10b981' // Green (Popular)
-                    : popularity > 0.3
-                        ? '#3b82f6' // Blue (Medium)
-                        : '#94a3b8'; // Grey (Low)
+                let color = '#94a3b8'; // Grey (Low)
+                let label = 'Sällsynt';
 
-                return { iata, count, start, end, midX, midY, color, popularity };
+                if (popularity > 0.7) {
+                    color = '#10b981'; // Green (Popular)
+                    label = 'Populär';
+                } else if (popularity > 0.3) {
+                    color = '#3b82f6'; // Blue (Medium)
+                    label = 'Vanlig';
+                }
+
+                return { iata, count, start, end, midX, midY, color, label, popularity };
             })
             .filter(Boolean);
-    }, [origin, originIata, flights]);
+    }, [origin, originIata, flights, getPos]);
+
+    const handleMouseEnter = useCallback((e, route) => {
+        const rect = e.target.getBoundingClientRect();
+        setTooltipPos({
+            x: e.clientX - rect.left + 20,
+            y: e.clientY - rect.top - 40
+        });
+        setHoveredRoute(route);
+    }, []);
+
+    const handleMouseLeave = useCallback(() => {
+        setHoveredRoute(null);
+    }, []);
 
     if (!origin) return null;
 
-    const originPos = {
-        x: ((origin.lng + 30) / 100) * 800,
-        y: ((75 - origin.lat) / 50) * 450,
-    };
+    const originPos = getPos(origin.lat, origin.lng);
 
     return (
-        <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '2rem', overflow: 'hidden' }}>
-            <h4 style={{ marginBottom: '1.5rem', fontSize: '0.9rem', color: 'var(--text-dim)' }}>
+        <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '2rem' }}>
+            <h3 style={{ marginBottom: '1.5rem', fontSize: '0.9rem', color: 'var(--text-dim)' }}>
                 FLYGRUTTER FRÅN {originIata}
-            </h4>
-            <div style={{ position: 'relative', width: '100%', height: 450, background: 'rgba(0,0,0,0.2)', borderRadius: 12 }}>
-                {/* Visual grid/map placeholder */}
-                <svg width="100%" height="100%" viewBox="0 0 800 450">
+            </h3>
+
+            <div className="route-map-container" style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: 'radial-gradient(ellipse at center, #1e293b 0%, #0f172a 100%)', borderRadius: 12, overflow: 'hidden' }}>
+                <svg width="100%" height="100%" viewBox="0 0 800 450" style={{ display: 'block' }}>
                     <defs>
-                        <linearGradient id="routeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                            <stop offset="0%" stopColor="var(--primary)" stopOpacity="0" />
-                            <stop offset="100%" stopColor="var(--primary)" />
-                        </linearGradient>
+                        <filter id="glow">
+                            <feGaussianBlur stdDeviation="2.5" result="coloredBlur" />
+                            <feMerge>
+                                <feMergeNode in="coloredBlur" />
+                                <feMergeNode in="SourceGraphic" />
+                            </feMerge>
+                        </filter>
                     </defs>
+
+                    {/* World Map Dots Background */}
+                    {Object.entries(DESTINATION_COORDS).map(([code, coords]) => {
+                        const pos = getPos(coords.lat, coords.lng);
+                        return (
+                            <circle
+                                key={code}
+                                cx={pos.x}
+                                cy={pos.y}
+                                r={1.5}
+                                fill="rgba(255, 255, 255, 0.15)"
+                            />
+                        );
+                    })}
 
                     {/* Routes */}
                     {routes.map((route) => (
@@ -288,39 +325,84 @@ const RouteMap = React.memo(({ originIata, flights }) => {
                                 d={`M ${route.start.x} ${route.start.y} Q ${route.midX} ${route.midY} ${route.end.x} ${route.end.y}`}
                                 fill="none"
                                 stroke={route.color}
-                                strokeWidth={1 + route.popularity * 3}
-                                strokeDasharray="1000"
-                                strokeDashoffset="1000"
+                                strokeWidth={hoveredRoute?.iata === route.iata ? 3 : 1 + route.popularity * 2}
+                                strokeLinecap="round"
+                                strokeOpacity={hoveredRoute && hoveredRoute.iata !== route.iata ? 0.2 : 0.8}
                                 style={{
-                                    opacity: 0.4 + route.popularity * 0.6,
-                                    animation: 'drawRoute 2s ease-out forwards'
+                                    transition: 'all 0.3s ease',
+                                    cursor: 'pointer'
                                 }}
-                            >
-                                <title>{route.iata}: {route.count} flyg</title>
-                            </path>
+                                onMouseEnter={(e) => handleMouseEnter(e, route)}
+                                onMouseLeave={handleMouseLeave}
+                            />
+                            {/* Hit area for easier hovering */}
+                            <path
+                                d={`M ${route.start.x} ${route.start.y} Q ${route.midX} ${route.midY} ${route.end.x} ${route.end.y}`}
+                                fill="none"
+                                stroke="transparent"
+                                strokeWidth="15"
+                                style={{ cursor: 'pointer' }}
+                                onMouseEnter={(e) => handleMouseEnter(e, route)}
+                                onMouseLeave={handleMouseLeave}
+                            />
+
                             {/* Destination Dot */}
-                            <circle cx={route.end.x} cy={route.end.y} r="3" fill={route.color}>
-                                <title>{route.iata}</title>
-                            </circle>
+                            <circle
+                                cx={route.end.x}
+                                cy={route.end.y}
+                                r={hoveredRoute?.iata === route.iata ? 5 : 3}
+                                fill={route.color}
+                                style={{ transition: 'all 0.3s ease' }}
+                            />
                         </g>
                     ))}
 
-                    {/* Origin Dot */}
-                    <circle cx={originPos.x} cy={originPos.y} r="6" fill="var(--primary)" style={{ filter: 'drop-shadow(0 0 8px var(--primary))' }} />
+                    {/* Origin Dot (Pulse effect) */}
+                    <circle cx={originPos.x} cy={originPos.y} r="4" fill="var(--primary)">
+                        <animate attributeName="r" values="4;8;4" dur="2s" repeatCount="indefinite" />
+                        <animate attributeName="opacity" values="1;0.5;1" dur="2s" repeatCount="indefinite" />
+                    </circle>
+                    <circle cx={originPos.x} cy={originPos.y} r="3" fill="#fff" />
                 </svg>
+
+                {/* Tooltip Overlay */}
+                {hoveredRoute && (
+                    <div
+                        style={{
+                            position: 'absolute',
+                            left: tooltipPos.x,
+                            top: tooltipPos.y,
+                            background: 'rgba(15, 23, 42, 0.9)',
+                            backdropFilter: 'blur(4px)',
+                            border: '1px solid var(--glass-border)',
+                            padding: '8px 12px',
+                            borderRadius: 8,
+                            pointerEvents: 'none',
+                            zIndex: 10,
+                            boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+                            transform: 'translate(-50%, -100%)',
+                        }}
+                    >
+                        <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#fff' }}>{hoveredRoute.iata}</div>
+                        <div style={{ fontSize: '0.8rem', color: hoveredRoute.color }}>
+                            {hoveredRoute.count} flyg ({hoveredRoute.label})
+                        </div>
+                    </div>
+                )}
 
                 {/* Legend */}
                 <div style={{
                     position: 'absolute',
                     bottom: 15,
-                    right: 15,
+                    left: 15,
                     display: 'flex',
                     flexDirection: 'column',
                     gap: 5,
                     fontSize: '0.7rem',
-                    background: 'rgba(0,0,0,0.5)',
+                    background: 'rgba(0,0,0,0.6)',
                     padding: '8px 12px',
-                    borderRadius: 8
+                    borderRadius: 8,
+                    pointerEvents: 'none'
                 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                         <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981' }} /> Populär (+70%)
@@ -333,11 +415,6 @@ const RouteMap = React.memo(({ originIata, flights }) => {
                     </div>
                 </div>
             </div>
-            <style>{`
-                @keyframes drawRoute {
-                    to { stroke-dashoffset: 0; }
-                }
-            `}</style>
         </div>
     );
 });
@@ -348,20 +425,53 @@ RouteMap.displayName = 'RouteMap';
 // MAIN COMPONENT
 // ============================================================================
 
+const DateRangeInput = React.memo(({ startDate, endDate, onStartChange, onEndChange }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255,255,255,0.05)', padding: '5px 12px', borderRadius: 20, border: '1px solid var(--glass-border)' }}>
+        <input
+            type="date"
+            value={startDate}
+            onChange={onStartChange}
+            aria-label="Startdatum"
+            style={{ background: 'none', border: 'none', color: 'white', fontSize: '0.8rem', outline: 'none', cursor: 'pointer', maxWidth: 110 }}
+        />
+        <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>&rarr;</span>
+        <input
+            type="date"
+            value={endDate}
+            onChange={onEndChange}
+            min={startDate}
+            aria-label="Slutdatum"
+            style={{ background: 'none', border: 'none', color: 'white', fontSize: '0.8rem', outline: 'none', cursor: 'pointer', maxWidth: 110 }}
+        />
+    </div>
+));
+
 /**
- * Airport statistics dashboard with filtering.
+ * Airport Statistics Component
+ * @description Displays various statistics based on flight data.
  * @param {Object} props
- * @param {Object[]} props.flights - Array of flight objects.
- * @param {string} props.airportIata - Current airport IATA code.
- * @returns {JSX.Element|null}
+ * @param {Object[]} props.flights - Flight data.
+ * @param {string} props.airportIata - Airport IATA code.
+ * @param {string} props.date - Current date string (for display).
+ * @param {string} props.startDate - Start date.
+ * @param {string} props.endDate - End date.
+ * @param {Function} props.onStartDateChange - Handler for start date.
+ * @param {Function} props.onEndDateChange - Handler for end date.
  */
-export const AirportStatistics = ({ flights, airportIata, date }) => {
-    const [filterQuery, setFilterQuery] = useState('');
+export const AirportStatistics = ({
+    flights,
+    airportIata,
+    startDate,
+    endDate,
+    onStartDateChange,
+    onEndDateChange
+}) => {
+    const [filter, setFilter] = useState('');
 
     // Filter flights based on query
     const filteredFlights = useMemo(
-        () => filterFlightsByQuery(flights, filterQuery),
-        [flights, filterQuery]
+        () => filterFlightsByQuery(flights, filter),
+        [flights, filter]
     );
 
     // Calculate statistics
@@ -384,8 +494,7 @@ export const AirportStatistics = ({ flights, airportIata, date }) => {
     }, [filteredFlights]);
 
     // Handlers
-    const handleFilterChange = useCallback((e) => setFilterQuery(e.target.value), []);
-    const handleClearFilter = useCallback(() => setFilterQuery(''), []);
+    // Removed unused handlers
 
     // Early return if no flights
     if (!flights?.length) return null;
@@ -395,21 +504,30 @@ export const AirportStatistics = ({ flights, airportIata, date }) => {
             {/* Header */}
             <div style={STYLES.header}>
                 <h2 style={STYLES.title}>
-                    <StatsIcon />
-                    Statistik för {airportIata}
-                    {date && <span style={{ fontSize: '0.9rem', opacity: 0.6, marginLeft: 10 }}>({date})</span>}
+                    <span style={{ fontSize: '1.5rem', marginRight: 10 }}>📊</span>
+                    <div>
+                        Statistik för {airportIata}
+                        <div style={{ marginTop: 5 }}>
+                            <DateRangeInput
+                                startDate={startDate}
+                                endDate={endDate}
+                                onStartChange={onStartDateChange}
+                                onEndChange={onEndDateChange}
+                            />
+                        </div>
+                    </div>
                 </h2>
 
                 <div style={STYLES.filterContainer}>
                     <input
                         type="text"
                         placeholder="Filtrera statistik (t.ex. Spanien, SAS)"
-                        value={filterQuery}
-                        onChange={handleFilterChange}
+                        value={filter}
+                        onChange={(e) => setFilter(e.target.value)}
                         style={STYLES.filterInput}
                     />
-                    {filterQuery && (
-                        <button onClick={handleClearFilter} style={STYLES.clearButton} aria-label="Rensa filter">
+                    {filter && (
+                        <button onClick={() => setFilter('')} style={STYLES.clearButton} aria-label="Rensa filter">
                             ✕
                         </button>
                     )}
@@ -430,7 +548,7 @@ export const AirportStatistics = ({ flights, airportIata, date }) => {
                     <div style={STYLES.statsGrid}>
                         <StatCard
                             value={stats.total}
-                            label={filterQuery ? 'Flyg (filtrerat)' : 'Flyg totalt'}
+                            label={filter ? 'Flyg (filtrerat)' : 'Flyg totalt'}
                         />
                         <StatCard
                             value={`${stats.delayRate}%`}
@@ -444,7 +562,7 @@ export const AirportStatistics = ({ flights, airportIata, date }) => {
                     <div style={STYLES.listsGrid}>
                         {/* Destinations */}
                         <div>
-                            <h4 style={STYLES.listHeader}>Toppdestinationer</h4>
+                            <h3 style={STYLES.listHeader}>Toppdestinationer</h3>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
                                 {stats.topDestinations.map(([dest, count]) => (
                                     <ProgressItem
@@ -459,7 +577,7 @@ export const AirportStatistics = ({ flights, airportIata, date }) => {
 
                         {/* Airlines */}
                         <div>
-                            <h4 style={STYLES.listHeader}>Flygbolag</h4>
+                            <h3 style={STYLES.listHeader}>Flygbolag</h3>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
                                 {stats.topAirlines.map(([airline, count]) => (
                                     <ProgressItem

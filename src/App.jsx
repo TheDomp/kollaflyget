@@ -99,7 +99,7 @@ const FlightTypeToggle = React.memo(({ type, onToggle }) => {
 FlightTypeToggle.displayName = 'FlightTypeToggle';
 
 /** Date selector component */
-const DateSelector = React.memo(({ value, onChange }) => (
+const DateSelector = React.memo(({ startDate, endDate, onStartChange, onEndChange }) => (
   <div
     style={{
       display: 'flex',
@@ -111,20 +111,42 @@ const DateSelector = React.memo(({ value, onChange }) => (
       border: '1px solid var(--glass-border)',
     }}
   >
-    <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>Datum:</span>
-    <input
-      type="date"
-      value={value}
-      onChange={onChange}
-      style={{
-        background: 'none',
-        border: 'none',
-        color: 'white',
-        fontSize: '0.9rem',
-        outline: 'none',
-        cursor: 'pointer',
-      }}
-    />
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>Från</span>
+      <input
+        type="date"
+        value={startDate}
+        onChange={onStartChange}
+        aria-label="Startdatum"
+        style={{
+          background: 'none',
+          border: 'none',
+          color: 'white',
+          fontSize: '0.8rem',
+          outline: 'none',
+          cursor: 'pointer',
+        }}
+      />
+    </div>
+    <div style={{ width: 1, height: 20, background: 'var(--glass-border)' }} />
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>Till</span>
+      <input
+        type="date"
+        value={endDate}
+        onChange={onEndChange}
+        min={startDate}
+        aria-label="Slutdatum"
+        style={{
+          background: 'none',
+          border: 'none',
+          color: 'white',
+          fontSize: '0.8rem',
+          outline: 'none',
+          cursor: 'pointer',
+        }}
+      />
+    </div>
   </div>
 ));
 
@@ -170,7 +192,8 @@ function App() {
   const [searchTitle, setSearchTitle] = useState(DEFAULT_TITLE);
   const [type, setType] = useState('arrivals');
   const [currentAirport, setCurrentAirport] = useState('');
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
 
   // Theme based on time of day
   const isNight = useMemo(() => {
@@ -185,16 +208,23 @@ function App() {
    * Handles airport selection and fetches flight data.
    */
   const handleAirportSelect = useCallback(
-    async (iata, date = selectedDate) => {
+    async (iata, start = startDate, end = endDate) => {
       setCurrentAirport(iata);
       setLoading(true);
       setError(null);
 
       const typeLabel = type === 'arrivals' ? 'Ankomster' : 'Avgångar';
-      setSearchTitle(`${typeLabel} vid ${iata} den ${date}`);
+      const dateLabel = start === end ? start : `${start} - ${end}`;
+      setSearchTitle(`${typeLabel} vid ${iata} ${dateLabel}`);
 
       try {
-        const data = await swedaviaService.getFlights(iata, type, date);
+        let data;
+        if (start === end) {
+          data = await swedaviaService.getFlights(iata, type, start);
+        } else {
+          data = await swedaviaService.getFlightsInRange(iata, type, start, end);
+        }
+
         setFlights(data);
         if (data.length === 0) {
           setError('Inga flyg hittades för valda parametrar.');
@@ -205,7 +235,7 @@ function App() {
         setLoading(false);
       }
     },
-    [type, selectedDate]
+    [type, startDate, endDate]
   );
 
   /**
@@ -219,23 +249,25 @@ function App() {
   // Re-fetch when type changes (if airport is selected)
   useEffect(() => {
     if (currentAirport) {
-      handleAirportSelect(currentAirport, selectedDate);
+      handleAirportSelect(currentAirport, startDate, endDate);
     }
   }, [type]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
-   * Handles date change.
+   * Handles date changes.
    */
-  const handleDateChange = useCallback(
-    (e) => {
-      const newDate = e.target.value;
-      setSelectedDate(newDate);
-      if (currentAirport) {
-        handleAirportSelect(currentAirport, newDate);
-      }
-    },
-    [currentAirport, handleAirportSelect]
-  );
+  const handleStartDateChange = useCallback((e) => {
+    const newDate = e.target.value;
+    setStartDate(newDate);
+    if (newDate > endDate) setEndDate(newDate); // Ensure end >= start
+    if (currentAirport) handleAirportSelect(currentAirport, newDate, newDate > endDate ? newDate : endDate);
+  }, [currentAirport, endDate, handleAirportSelect]);
+
+  const handleEndDateChange = useCallback((e) => {
+    const newDate = e.target.value;
+    setEndDate(newDate);
+    if (currentAirport) handleAirportSelect(currentAirport, startDate, newDate);
+  }, [currentAirport, startDate, handleAirportSelect]);
 
   /**
    * Handles manual flight search.
@@ -249,10 +281,10 @@ function App() {
       const data = await swedaviaService.searchFlight(query, date);
       setFlights(data);
       if (data.length === 0) {
-        setError(`Hittade inga flyg med söktermen "${query}".`);
+        setError('Inga flyg hittades för valda parametrar.');
       }
     } catch {
-      setError('Ett fel uppstod vid sökningen.');
+      setError('Ett fel uppstod vid hämtning av flyg.');
     } finally {
       setLoading(false);
     }
@@ -317,7 +349,6 @@ function App() {
             className="fade-in"
           >
             <FlightTypeToggle type={type} onToggle={toggleType} />
-            <DateSelector value={selectedDate} onChange={handleDateChange} />
             {showStatistics && <StatsButton />}
           </div>
 
@@ -326,7 +357,14 @@ function App() {
           <FlightList flights={flights} loading={loading} title={searchTitle} error={error} />
 
           {showStatistics && (
-            <AirportStatistics flights={flights} airportIata={currentAirport} date={selectedDate} />
+            <AirportStatistics
+              flights={flights}
+              airportIata={currentAirport}
+              startDate={startDate}
+              endDate={endDate}
+              onStartDateChange={handleStartDateChange}
+              onEndDateChange={handleEndDateChange}
+            />
           )}
 
           {currentAirport && !loading && (

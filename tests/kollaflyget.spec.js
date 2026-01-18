@@ -53,4 +53,67 @@ test.describe('Kolla flyget UI Tests', () => {
 
         await expect(page.getByText('Säkerhetskontroll')).toBeVisible({ timeout: 15000 });
     });
+
+    // Favorites test
+    test('should star a flight and keep it after reload', async ({ page }) => {
+        // Clear local storage and reload to clean state
+        await page.evaluate(() => localStorage.clear());
+        await page.reload();
+
+        // Must load flights first!
+        const select = page.locator('select').first();
+        await select.selectOption({ label: 'Stockholm Arlanda Airport' });
+        await expect(page.locator('.flight-card').first()).toBeVisible({ timeout: 15000 });
+
+        const flightCard = page.locator('.flight-card').first();
+        // Use the robust class selector
+        const starBtn = flightCard.locator('.favorite-btn');
+        await expect(starBtn).toBeVisible({ timeout: 15000 });
+
+        await starBtn.click();
+
+        // Check if star became active (fill change or class)
+        await expect(flightCard.locator('svg[fill*="currentColor"]')).toBeVisible();
+
+        // Reload and check persistence - MUST search again to see the flight
+        await page.reload();
+
+        // Re-select to trigger search
+        await page.locator('select').first().selectOption({ label: 'Stockholm Arlanda Airport' });
+        await expect(page.locator('.flight-card').first()).toBeVisible({ timeout: 15000 });
+
+        await expect(page.locator('.flight-card').first().locator('svg[fill*="currentColor"]')).toBeVisible();
+    });
+
+
+
+    // Maps verification
+    test('should render RouteMap and Google Maps iframe', async ({ page }) => {
+        // Must select airport first to see stats
+        const select = page.locator('select').first();
+        await select.selectOption({ label: 'Stockholm Arlanda Airport' });
+
+        await expect(page.locator('.flight-list-container')).toBeVisible({ timeout: 15000 });
+
+        const visaStatsBtn = page.getByRole('button', { name: /Visa Statistik/i });
+        await expect(visaStatsBtn).toBeVisible();
+        await visaStatsBtn.click();
+
+        // RouteMap verification
+        await expect(page.getByText(/FLYGRUTTER FRÅN/i)).toBeVisible();
+        await expect(page.locator('svg[viewBox="0 0 800 450"]')).toBeVisible();
+
+        // Google Maps Iframe
+        const airportMap = page.locator('iframe[title="Airport Map"]');
+        await expect(airportMap).toBeVisible();
+    });
+
+    // Error state test
+    test('should show empty state for invalid search', async ({ page }) => {
+        const searchInput = page.getByPlaceholder(/t.ex. London, Spanien eller SK160/i);
+        await searchInput.fill('XYZ123NONEXISTENT');
+        await page.getByRole('button', { name: 'Sök flyg' }).click();
+
+        await expect(page.getByText('Inga flyg hittades för valda parametrar.')).toBeVisible({ timeout: 15000 });
+    });
 });
