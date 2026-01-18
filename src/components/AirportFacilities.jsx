@@ -90,11 +90,30 @@ const extractUniqueFacilities = (data) => {
         if (seen.has(name)) return false;
         seen.add(name);
         return true;
-    }).map((item) => ({
-        id: item.id || item.facilityId || Math.random().toString(36).slice(2),
-        name: item.name || item.facilityName,
-        location: item.location || item.terminal || item.area || null,
-    }));
+    }).map((item) => {
+        let locString = null;
+
+        // Swedavia API structure often has location as a nested object
+        if (item.location && typeof item.location === 'object') {
+            const parts = [item.location.terminalName, item.location.place];
+            locString = parts.filter(Boolean).join(', ');
+        } else {
+            locString = item.location || item.area || null;
+        }
+
+        // Fallback for terminal if location wasn't helpful
+        if (!locString && item.terminal) {
+            locString = typeof item.terminal === 'object'
+                ? item.terminal.terminalName || item.terminal.terminalId
+                : item.terminal;
+        }
+
+        return {
+            id: item.id || item.facilityId || Math.random().toString(36).slice(2),
+            name: item.name || item.facilityName,
+            location: locString,
+        };
+    });
 };
 
 // ============================================================================

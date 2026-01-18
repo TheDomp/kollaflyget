@@ -8,6 +8,7 @@ import { SearchCard } from './components/SearchCard';
 import { FlightList } from './components/FlightList';
 import { SecurityWaitTime } from './components/SecurityWaitTime';
 import { AirportFacilities } from './components/AirportFacilities';
+import { AirportMap } from './components/AirportMap';
 import { AirportStatistics } from './components/AirportStatistics';
 import { swedaviaService } from './services/swedaviaApi';
 
@@ -325,10 +326,15 @@ function App() {
           <FlightList flights={flights} loading={loading} title={searchTitle} error={error} />
 
           {showStatistics && (
-            <AirportStatistics flights={flights} airportIata={currentAirport} />
+            <AirportStatistics flights={flights} airportIata={currentAirport} date={selectedDate} />
           )}
 
-          {currentAirport && !loading && <AirportFacilities airportIata={currentAirport} />}
+          {currentAirport && !loading && (
+            <>
+              <AirportMap airportIata={currentAirport} />
+              <AirportFacilities airportIata={currentAirport} />
+            </>
+          )}
         </main>
 
         {/* Footer */}

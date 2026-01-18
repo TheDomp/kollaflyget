@@ -13,16 +13,16 @@
  * @type {Array<{iata: string, name: string}>}
  */
 export const AIRPORTS = Object.freeze([
-  { iata: 'ARN', name: 'Stockholm Arlanda Airport' },
-  { iata: 'GOT', name: 'Göteborg Landvetter Airport' },
-  { iata: 'BMA', name: 'Stockholm Bromma Airport' },
-  { iata: 'MMX', name: 'Malmö Airport' },
-  { iata: 'LLA', name: 'Luleå Airport' },
-  { iata: 'UME', name: 'Umeå Airport' },
-  { iata: 'OSR', name: 'Östersund Airport' },
-  { iata: 'VBY', name: 'Visby Airport' },
-  { iata: 'RNB', name: 'Ronneby Airport' },
-  { iata: 'KRN', name: 'Kiruna Airport' },
+  { iata: 'ARN', name: 'Stockholm Arlanda Airport', lat: 59.6519, lng: 17.9186 },
+  { iata: 'GOT', name: 'Göteborg Landvetter Airport', lat: 57.6688, lng: 12.2797 },
+  { iata: 'BMA', name: 'Stockholm Bromma Airport', lat: 59.3544, lng: 17.9417 },
+  { iata: 'MMX', name: 'Malmö Airport', lat: 55.5302, lng: 13.3724 },
+  { iata: 'LLA', name: 'Luleå Airport', lat: 65.5437, lng: 22.1264 },
+  { iata: 'UME', name: 'Umeå Airport', lat: 63.7930, lng: 20.2829 },
+  { iata: 'OSR', name: 'Östersund Airport', lat: 63.1932, lng: 14.5007 },
+  { iata: 'VBY', name: 'Visby Airport', lat: 57.6628, lng: 18.3461 },
+  { iata: 'RNB', name: 'Ronneby Airport', lat: 56.2667, lng: 15.2650 },
+  { iata: 'KRN', name: 'Kiruna Airport', lat: 67.8222, lng: 20.3367 },
 ]);
 
 /**
@@ -41,6 +41,63 @@ export const COUNTRY_MAPPING = Object.freeze({
   'USA': ['JFK', 'EWR', 'ORD', 'LAX', 'New York', 'Chicago', 'Los Angeles'],
   'Thailand': ['BKK', 'HKT', 'Bangkok', 'Phuket'],
   'Grekland': ['ATH', 'CHQ', 'RHO', 'Aten', 'Chania', 'Rhodos'],
+});
+
+/**
+ * Coordinate mapping for common destinations (IATA code to Lat/Lng).
+ * Used for drawing flight route maps.
+ * @type {Record<string, {lat: number, lng: number}>}
+ */
+export const DESTINATION_COORDS = Object.freeze({
+  // Sweden
+  'ARN': { lat: 59.6519, lng: 17.9186 },
+  'GOT': { lat: 57.6688, lng: 12.2797 },
+  'BMA': { lat: 59.3544, lng: 17.9417 },
+  'MMX': { lat: 55.5302, lng: 13.3724 },
+  'LLA': { lat: 65.5437, lng: 22.1264 },
+  'UME': { lat: 63.7930, lng: 20.2829 },
+  'OSR': { lat: 63.1932, lng: 14.5007 },
+  'VBY': { lat: 57.6628, lng: 18.3461 },
+  'RNB': { lat: 56.2667, lng: 15.2650 },
+  'KRN': { lat: 67.8222, lng: 20.3367 },
+  'SDL': { lat: 62.4831, lng: 17.4378 }, // Sundsvall
+  'VXO': { lat: 56.9286, lng: 14.7269 }, // Växjö
+  'NRK': { lat: 58.5913, lng: 16.2417 }, // Norrköping
+  'KSD': { lat: 59.4444, lng: 13.3375 }, // Karlstad
+
+  // Europe
+  'HEL': { lat: 60.3172, lng: 24.9633 }, // Helsinki
+  'CPH': { lat: 55.6180, lng: 12.6508 }, // Copenhagen
+  'OSL': { lat: 60.1975, lng: 11.1004 }, // Oslo
+  'FRA': { lat: 50.0379, lng: 8.5622 },  // Frankfurt
+  'MUC': { lat: 48.3537, lng: 11.7861 }, // Munich
+  'BER': { lat: 52.3667, lng: 13.5033 }, // Berlin
+  'LHR': { lat: 51.4700, lng: -0.4543 }, // London Heathrow
+  'LGW': { lat: 51.1481, lng: -0.1903 }, // London Gatwick
+  'AMS': { lat: 52.3086, lng: 4.7639 },  // Amsterdam
+  'CDG': { lat: 49.0097, lng: 2.5479 },  // Paris CDG
+  'MAD': { lat: 40.4839, lng: -3.5680 }, // Madrid
+  'BCN': { lat: 41.2974, lng: 2.0833 },  // Barcelona
+  'AGP': { lat: 36.6749, lng: -4.4991 }, // Malaga
+  'PMI': { lat: 39.5495, lng: 2.7388 },  // Palma
+  'ALC': { lat: 38.2822, lng: -0.5582 }, // Alicante
+  'FCO': { lat: 41.8003, lng: 12.2389 }, // Rome
+  'MXP': { lat: 45.6300, lng: 8.7231 },  // Milan
+  'VCE': { lat: 45.5053, lng: 12.3519 }, // Venice
+  'ATH': { lat: 37.9364, lng: 23.9445 }, // Athens
+  'ZRH': { lat: 47.4582, lng: 8.5555 },  // Zurich
+  'VIE': { lat: 48.1103, lng: 16.5697 }, // Vienna
+  'BRU': { lat: 50.9014, lng: 4.4844 },  // Brussels
+  'IST': { lat: 41.2753, lng: 28.7519 }, // Istanbul
+
+  // World
+  'DXB': { lat: 25.2532, lng: 55.3657 }, // Dubai
+  'DOH': { lat: 25.2731, lng: 51.6081 }, // Doha
+  'BKK': { lat: 13.6900, lng: 100.7501 },// Bangkok
+  'JFK': { lat: 40.6413, lng: -73.7781 },// New York
+  'EWR': { lat: 40.6895, lng: -74.1745 },// Newark
+  'ORD': { lat: 41.9742, lng: -87.9073 },// Chicago
+  'LAX': { lat: 33.9416, lng: -118.4085 },// Los Angeles
 });
 
 /** @private */
@@ -126,6 +183,8 @@ const transformFlight = (rawFlight, type) => {
     destination: isArrival
       ? rawFlight.departureAirportSwedish
       : rawFlight.arrivalAirportSwedish,
+    originIata: rawFlight.flightLegIdentifier?.departureAirportIata,
+    destinationIata: rawFlight.flightLegIdentifier?.arrivalAirportIata,
     time: timeData?.scheduledUtc?.split('T')[1]?.substring(0, 5) ?? '--:--',
     status: rawFlight.locationAndStatus?.flightLegStatusSwedish ?? 'Okänd',
     gate: rawFlight.locationAndStatus?.gate ?? '-',

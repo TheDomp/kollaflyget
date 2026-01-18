@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { COUNTRY_MAPPING } from '../services/swedaviaApi';
+import { COUNTRY_MAPPING, DESTINATION_COORDS, AIRPORTS } from '../services/swedaviaApi';
 
 // ============================================================================
 // CONSTANTS
@@ -210,6 +210,140 @@ const ProgressItem = React.memo(({ label, count, maxCount, color = 'var(--primar
 
 ProgressItem.displayName = 'ProgressItem';
 
+/**
+ * Interactive Flight Route Map
+ */
+const RouteMap = React.memo(({ originIata, flights }) => {
+    const origin = useMemo(() => DESTINATION_COORDS[originIata], [originIata]);
+
+    const routes = useMemo(() => {
+        if (!origin) return [];
+        const counts = flights.reduce((acc, f) => {
+            const dest = f.type === 'Arrival' ? f.originIata : f.destinationIata;
+            if (dest && dest !== originIata) {
+                acc[dest] = (acc[dest] || 0) + 1;
+            }
+            return acc;
+        }, {});
+
+        const maxCount = Math.max(...Object.values(counts), 1);
+
+        return Object.entries(counts)
+            .map(([iata, count]) => {
+                const coords = DESTINATION_COORDS[iata];
+                if (!coords) return null;
+
+                // Simple mercator-ish projection
+                const getPos = (lat, lng) => ({
+                    x: ((lng + 30) / 100) * 800, // Focus on Europe/MidEast
+                    y: ((75 - lat) / 50) * 450,
+                });
+
+                const start = getPos(origin.lat, origin.lng);
+                const end = getPos(coords.lat, coords.lng);
+
+                // Curve calculation
+                const midX = (start.x + end.x) / 2;
+                const midY = (start.y + end.y) / 2 - Math.abs(start.x - end.x) * 0.2;
+
+                // Color based on popularity
+                const popularity = count / maxCount;
+                const color = popularity > 0.7
+                    ? '#10b981' // Green (Popular)
+                    : popularity > 0.3
+                        ? '#3b82f6' // Blue (Medium)
+                        : '#94a3b8'; // Grey (Low)
+
+                return { iata, count, start, end, midX, midY, color, popularity };
+            })
+            .filter(Boolean);
+    }, [origin, originIata, flights]);
+
+    if (!origin) return null;
+
+    const originPos = {
+        x: ((origin.lng + 30) / 100) * 800,
+        y: ((75 - origin.lat) / 50) * 450,
+    };
+
+    return (
+        <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '2rem', overflow: 'hidden' }}>
+            <h4 style={{ marginBottom: '1.5rem', fontSize: '0.9rem', color: 'var(--text-dim)' }}>
+                FLYGRUTTER FRÅN {originIata}
+            </h4>
+            <div style={{ position: 'relative', width: '100%', height: 450, background: 'rgba(0,0,0,0.2)', borderRadius: 12 }}>
+                {/* Visual grid/map placeholder */}
+                <svg width="100%" height="100%" viewBox="0 0 800 450">
+                    <defs>
+                        <linearGradient id="routeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stopColor="var(--primary)" stopOpacity="0" />
+                            <stop offset="100%" stopColor="var(--primary)" />
+                        </linearGradient>
+                    </defs>
+
+                    {/* Routes */}
+                    {routes.map((route) => (
+                        <g key={route.iata}>
+                            <path
+                                d={`M ${route.start.x} ${route.start.y} Q ${route.midX} ${route.midY} ${route.end.x} ${route.end.y}`}
+                                fill="none"
+                                stroke={route.color}
+                                strokeWidth={1 + route.popularity * 3}
+                                strokeDasharray="1000"
+                                strokeDashoffset="1000"
+                                style={{
+                                    opacity: 0.4 + route.popularity * 0.6,
+                                    animation: 'drawRoute 2s ease-out forwards'
+                                }}
+                            >
+                                <title>{route.iata}: {route.count} flyg</title>
+                            </path>
+                            {/* Destination Dot */}
+                            <circle cx={route.end.x} cy={route.end.y} r="3" fill={route.color}>
+                                <title>{route.iata}</title>
+                            </circle>
+                        </g>
+                    ))}
+
+                    {/* Origin Dot */}
+                    <circle cx={originPos.x} cy={originPos.y} r="6" fill="var(--primary)" style={{ filter: 'drop-shadow(0 0 8px var(--primary))' }} />
+                </svg>
+
+                {/* Legend */}
+                <div style={{
+                    position: 'absolute',
+                    bottom: 15,
+                    right: 15,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 5,
+                    fontSize: '0.7rem',
+                    background: 'rgba(0,0,0,0.5)',
+                    padding: '8px 12px',
+                    borderRadius: 8
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981' }} /> Populär (+70%)
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#3b82f6' }} /> Vanlig
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#94a3b8' }} /> Sällsynt
+                    </div>
+                </div>
+            </div>
+            <style>{`
+                @keyframes drawRoute {
+                    to { stroke-dashoffset: 0; }
+                }
+            `}</style>
+        </div>
+    );
+});
+
+RouteMap.displayName = 'RouteMap';
+
 // ============================================================================
 // MAIN COMPONENT
 // ============================================================================
@@ -221,7 +355,7 @@ ProgressItem.displayName = 'ProgressItem';
  * @param {string} props.airportIata - Current airport IATA code.
  * @returns {JSX.Element|null}
  */
-export const AirportStatistics = ({ flights, airportIata }) => {
+export const AirportStatistics = ({ flights, airportIata, date }) => {
     const [filterQuery, setFilterQuery] = useState('');
 
     // Filter flights based on query
@@ -263,6 +397,7 @@ export const AirportStatistics = ({ flights, airportIata }) => {
                 <h2 style={STYLES.title}>
                     <StatsIcon />
                     Statistik för {airportIata}
+                    {date && <span style={{ fontSize: '0.9rem', opacity: 0.6, marginLeft: 10 }}>({date})</span>}
                 </h2>
 
                 <div style={STYLES.filterContainer}>
@@ -288,6 +423,9 @@ export const AirportStatistics = ({ flights, airportIata }) => {
                 </div>
             ) : (
                 <>
+                    {/* Route Map */}
+                    <RouteMap originIata={airportIata} flights={filteredFlights} />
+
                     {/* Stats Cards */}
                     <div style={STYLES.statsGrid}>
                         <StatCard
