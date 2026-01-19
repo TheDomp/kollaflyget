@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { COUNTRY_MAPPING, DESTINATION_COORDS } from '../services/swedaviaApi';
+import { COUNTRY_MAPPING, DESTINATION_COORDS, AIRPORTS } from '../services/swedaviaApi';
 import FlightMap from './FlightMap';
 
 // ============================================================================
@@ -20,23 +20,16 @@ const STYLES = {
     header: {
         display: 'flex',
         justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: '2.5rem',
+        alignItems: 'center',
+        marginBottom: '2rem',
         flexWrap: 'wrap',
-        gap: '1.5rem',
-    },
-    titleSection: {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '1.5rem', // Increased gap between title and picker
+        gap: '1rem',
     },
     title: {
         display: 'flex',
         alignItems: 'center',
-        gap: 12,
+        gap: 10,
         margin: 0,
-        fontSize: '1.5rem',
-        fontWeight: 600,
     },
     filterContainer: {
         position: 'relative',
@@ -434,37 +427,23 @@ RouteMap.displayName = 'RouteMap';
 // ============================================================================
 
 const DateRangeInput = React.memo(({ startDate, endDate, onStartChange, onEndChange }) => (
-    <div style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '2rem', // Increased gap between Från and Till
-        background: 'rgba(255,255,255,0.08)',
-        padding: '8px 20px',
-        borderRadius: '24px',
-        border: '1px solid var(--glass-border)',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
-    }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>Från</span>
-            <input
-                type="date"
-                value={startDate}
-                onChange={onStartChange}
-                aria-label="Startdatum"
-                style={{ background: 'none', border: 'none', color: 'white', fontSize: '0.85rem', outline: 'none', cursor: 'pointer', width: '135px' }}
-            />
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>Till</span>
-            <input
-                type="date"
-                value={endDate}
-                onChange={onEndChange}
-                min={startDate}
-                aria-label="Slutdatum"
-                style={{ background: 'none', border: 'none', color: 'white', fontSize: '0.85rem', outline: 'none', cursor: 'pointer', width: '135px' }}
-            />
-        </div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255,255,255,0.05)', padding: '5px 12px', borderRadius: 20, border: '1px solid var(--glass-border)' }}>
+        <input
+            type="date"
+            value={startDate}
+            onChange={onStartChange}
+            aria-label="Startdatum"
+            style={{ background: 'none', border: 'none', color: 'white', fontSize: '0.8rem', outline: 'none', cursor: 'pointer', maxWidth: 110 }}
+        />
+        <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>&rarr;</span>
+        <input
+            type="date"
+            value={endDate}
+            onChange={onEndChange}
+            min={startDate}
+            aria-label="Slutdatum"
+            style={{ background: 'none', border: 'none', color: 'white', fontSize: '0.8rem', outline: 'none', cursor: 'pointer', maxWidth: 110 }}
+        />
     </div>
 ));
 
@@ -515,6 +494,8 @@ export const AirportStatistics = ({
         };
     }, [filteredFlights]);
 
+    // Handlers
+    // Removed unused handlers
 
     // Early return if no flights
     if (!flights?.length) return null;
@@ -523,18 +504,20 @@ export const AirportStatistics = ({
         <div id="airport-stats" className="glass-card fade-in" style={STYLES.container}>
             {/* Header */}
             <div style={STYLES.header}>
-                <div style={STYLES.titleSection}>
-                    <h2 style={STYLES.title}>
-                        <span>📊</span>
+                <h2 style={STYLES.title}>
+                    <span style={{ fontSize: '1.5rem', marginRight: 10 }}>📊</span>
+                    <div>
                         Statistik för {airportIata}
-                    </h2>
-                    <DateRangeInput
-                        startDate={startDate}
-                        endDate={endDate}
-                        onStartChange={onStartDateChange}
-                        onEndChange={onEndDateChange}
-                    />
-                </div>
+                        <div style={{ marginTop: 5 }}>
+                            <DateRangeInput
+                                startDate={startDate}
+                                endDate={endDate}
+                                onStartChange={onStartDateChange}
+                                onEndChange={onEndDateChange}
+                            />
+                        </div>
+                    </div>
+                </h2>
 
                 <div style={STYLES.filterContainer}>
                     <input
@@ -559,8 +542,35 @@ export const AirportStatistics = ({
                 </div>
             ) : (
                 <>
-                    {/* Route Map */}
-                    <RouteMap originIata={airportIata} flights={filteredFlights} />
+                    {/* Route Map (Leaflet) */}
+                    <div className="glass-card" style={{ padding: '0', marginBottom: '2rem', borderRadius: 12, overflow: 'hidden' }}>
+                        <div style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>
+                            <h3 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-dim)' }}>FLYGRUTTER FRÅN {airportIata}</h3>
+                        </div>
+                        <FlightMap
+                            origin={DESTINATION_COORDS[airportIata]}
+                            originIata={airportIata}
+                            destinations={
+                                // Prepare data for map
+                                (() => {
+                                    const counts = filteredFlights.reduce((acc, f) => {
+                                        const dest = f.type === 'Arrival' ? f.originIata : f.destinationIata;
+                                        if (dest && dest !== airportIata && DESTINATION_COORDS[dest]) {
+                                            acc[dest] = (acc[dest] || 0) + 1;
+                                        }
+                                        return acc;
+                                    }, {});
+                                    const max = Math.max(...Object.values(counts), 1);
+                                    return Object.entries(counts).map(([iata, count]) => ({
+                                        iata,
+                                        count,
+                                        ...DESTINATION_COORDS[iata],
+                                        popularity: count / max
+                                    }));
+                                })()
+                            }
+                        />
+                    </div>
 
                     {/* Stats Cards */}
                     <div style={STYLES.statsGrid}>

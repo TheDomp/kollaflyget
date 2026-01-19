@@ -101,7 +101,7 @@ test.describe('Kolla flyget UI Tests', () => {
 
         // RouteMap verification
         await expect(page.getByText(/FLYGRUTTER FRÅN/i)).toBeVisible();
-        await expect(page.locator('.leaflet-container')).toBeVisible();
+        await expect(page.locator('svg[viewBox="0 0 800 450"]')).toBeVisible();
 
         // Google Maps Iframe
         const airportMap = page.locator('iframe[title="Airport Map"]');
