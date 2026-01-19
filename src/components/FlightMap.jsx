@@ -1,3 +1,7 @@
+/**
+ * @fileoverview Interactive Flight Route Map Component
+ * @description Displays flight routes on an interactive Leaflet map with markers and polylines.
+ */
 
 import React, { useMemo, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';

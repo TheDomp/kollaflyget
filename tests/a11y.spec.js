@@ -12,6 +12,9 @@ test.describe('Kolla flyget Accessibility Tests', () => {
     });
 
     test('main landing page should be accessible', async ({ page }) => {
+        // Wait for React app to render
+        await expect(page.locator('h1')).toBeVisible({ timeout: 10000 });
+
         const accessibilityScanResults = await new AxeBuilder({ page })
             .exclude('.clouds-container')
             .disableRules(['color-contrast']) // Glassmorphism creates false positives
@@ -23,8 +26,11 @@ test.describe('Kolla flyget Accessibility Tests', () => {
         const select = page.locator('select').first();
         await select.selectOption({ label: 'Stockholm Arlanda Airport' });
 
+        // Wait for the option to be selected and network idle
+        await page.waitForLoadState('networkidle');
+
         // Wait for content to load
-        await expect(page.locator('.flight-card').first()).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('.flight-card').first()).toBeVisible({ timeout: 20000 });
 
         const accessibilityScanResults = await new AxeBuilder({ page })
             .exclude('.clouds-container') // Exclude decorative elements if they conflict

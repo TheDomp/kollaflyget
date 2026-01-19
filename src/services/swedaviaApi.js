@@ -112,8 +112,6 @@ export const DESTINATION_COORDS = Object.freeze({
   'SIN': { lat: 1.3644, lng: 103.9915 },  // Singapore
   'ICN': { lat: 37.4602, lng: 126.4407 }, // Seoul
   'DEL': { lat: 28.5562, lng: 77.1000 },  // Delhi
-  'DXB': { lat: 25.2532, lng: 55.3657 },  // Dubai
-  'DOH': { lat: 25.2731, lng: 51.6081 },  // Doha
 });
 
 /** @private */

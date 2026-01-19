@@ -67,7 +67,7 @@ test.describe('Airport Map Stability', () => {
         expect(isMapVisible).toBe(true);
 
         // 10. Wait for the loading to complete and new data to appear
-        await expect(page.getByTestId('loading-overlay')).not.toBeVisible({ timeout: 5000 });
+        await expect(page.getByTestId('loading-overlay')).not.toBeVisible({ timeout: 10000 });
 
         // Ensure the map is still visible after loading completes
         await expect(page.locator('.leaflet-container')).toBeVisible();

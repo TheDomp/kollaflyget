@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { COUNTRY_MAPPING, DESTINATION_COORDS, AIRPORTS } from '../services/swedaviaApi';
+import { COUNTRY_MAPPING, DESTINATION_COORDS } from '../services/swedaviaApi';
 import FlightMap from './FlightMap';
 
 // ============================================================================
@@ -20,16 +20,23 @@ const STYLES = {
     header: {
         display: 'flex',
         justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '2rem',
+        alignItems: 'flex-start',
+        marginBottom: '2.5rem',
         flexWrap: 'wrap',
-        gap: '1rem',
+        gap: '1.5rem',
+    },
+    titleSection: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '1.5rem', // Increased gap between title and picker
     },
     title: {
         display: 'flex',
         alignItems: 'center',
-        gap: 10,
+        gap: 12,
         margin: 0,
+        fontSize: '1.5rem',
+        fontWeight: 600,
     },
     filterContainer: {
         position: 'relative',
@@ -211,239 +218,42 @@ const ProgressItem = React.memo(({ label, count, maxCount, color = 'var(--primar
 
 ProgressItem.displayName = 'ProgressItem';
 
-/**
- * Interactive Flight Route Map with Tooltips and World Projection
- */
-const RouteMap = React.memo(({ originIata, flights }) => {
-    const [hoveredRoute, setHoveredRoute] = useState(null);
-    const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
-
-    // World Map Projection (Equirectangular) mapping to 800x450
-    const getPos = useCallback((lat, lng) => ({
-        x: (lng + 180) * (800 / 360),
-        y: (90 - lat) * (450 / 180),
-    }), []);
-
-    const origin = useMemo(() => DESTINATION_COORDS[originIata], [originIata]);
-
-    const routes = useMemo(() => {
-        if (!origin) return [];
-        const counts = flights.reduce((acc, f) => {
-            const dest = f.type === 'Arrival' ? f.originIata : f.destinationIata;
-            if (dest && dest !== originIata) {
-                acc[dest] = (acc[dest] || 0) + 1;
-            }
-            return acc;
-        }, {});
-
-        const maxCount = Math.max(...Object.values(counts), 1);
-
-        return Object.entries(counts)
-            .map(([iata, count]) => {
-                const coords = DESTINATION_COORDS[iata];
-                if (!coords) return null;
-
-                const start = getPos(origin.lat, origin.lng);
-                const end = getPos(coords.lat, coords.lng);
-
-                // Curve calculation
-                const dx = end.x - start.x;
-                const dy = end.y - start.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                const midX = (start.x + end.x) / 2;
-                const midY = (start.y + end.y) / 2 - dist * 0.2; // Arc height based on distance
-
-                const popularity = count / maxCount;
-                let color = '#94a3b8'; // Grey (Low)
-                let label = 'Sällsynt';
-
-                if (popularity > 0.7) {
-                    color = '#10b981'; // Green (Popular)
-                    label = 'Populär';
-                } else if (popularity > 0.3) {
-                    color = '#3b82f6'; // Blue (Medium)
-                    label = 'Vanlig';
-                }
-
-                return { iata, count, start, end, midX, midY, color, label, popularity };
-            })
-            .filter(Boolean);
-    }, [origin, originIata, flights, getPos]);
-
-    const handleMouseEnter = useCallback((e, route) => {
-        const rect = e.target.getBoundingClientRect();
-        setTooltipPos({
-            x: e.clientX - rect.left + 20,
-            y: e.clientY - rect.top - 40
-        });
-        setHoveredRoute(route);
-    }, []);
-
-    const handleMouseLeave = useCallback(() => {
-        setHoveredRoute(null);
-    }, []);
-
-    if (!origin) return null;
-
-    const originPos = getPos(origin.lat, origin.lng);
-
-    return (
-        <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '2rem' }}>
-            <h3 style={{ marginBottom: '1.5rem', fontSize: '0.9rem', color: 'var(--text-dim)' }}>
-                FLYGRUTTER FRÅN {originIata}
-            </h3>
-
-            <div className="route-map-container" style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: 'radial-gradient(ellipse at center, #1e293b 0%, #0f172a 100%)', borderRadius: 12, overflow: 'hidden' }}>
-                <svg width="100%" height="100%" viewBox="0 0 800 450" style={{ display: 'block' }}>
-                    <defs>
-                        <filter id="glow">
-                            <feGaussianBlur stdDeviation="2.5" result="coloredBlur" />
-                            <feMerge>
-                                <feMergeNode in="coloredBlur" />
-                                <feMergeNode in="SourceGraphic" />
-                            </feMerge>
-                        </filter>
-                    </defs>
-
-                    {/* World Map Dots Background */}
-                    {Object.entries(DESTINATION_COORDS).map(([code, coords]) => {
-                        const pos = getPos(coords.lat, coords.lng);
-                        return (
-                            <circle
-                                key={code}
-                                cx={pos.x}
-                                cy={pos.y}
-                                r={1.5}
-                                fill="rgba(255, 255, 255, 0.15)"
-                            />
-                        );
-                    })}
-
-                    {/* Routes */}
-                    {routes.map((route) => (
-                        <g key={route.iata}>
-                            <path
-                                d={`M ${route.start.x} ${route.start.y} Q ${route.midX} ${route.midY} ${route.end.x} ${route.end.y}`}
-                                fill="none"
-                                stroke={route.color}
-                                strokeWidth={hoveredRoute?.iata === route.iata ? 3 : 1 + route.popularity * 2}
-                                strokeLinecap="round"
-                                strokeOpacity={hoveredRoute && hoveredRoute.iata !== route.iata ? 0.2 : 0.8}
-                                style={{
-                                    transition: 'all 0.3s ease',
-                                    cursor: 'pointer'
-                                }}
-                                onMouseEnter={(e) => handleMouseEnter(e, route)}
-                                onMouseLeave={handleMouseLeave}
-                            />
-                            {/* Hit area for easier hovering */}
-                            <path
-                                d={`M ${route.start.x} ${route.start.y} Q ${route.midX} ${route.midY} ${route.end.x} ${route.end.y}`}
-                                fill="none"
-                                stroke="transparent"
-                                strokeWidth="15"
-                                style={{ cursor: 'pointer' }}
-                                onMouseEnter={(e) => handleMouseEnter(e, route)}
-                                onMouseLeave={handleMouseLeave}
-                            />
-
-                            {/* Destination Dot */}
-                            <circle
-                                cx={route.end.x}
-                                cy={route.end.y}
-                                r={hoveredRoute?.iata === route.iata ? 5 : 3}
-                                fill={route.color}
-                                style={{ transition: 'all 0.3s ease' }}
-                            />
-                        </g>
-                    ))}
-
-                    {/* Origin Dot (Pulse effect) */}
-                    <circle cx={originPos.x} cy={originPos.y} r="4" fill="var(--primary)">
-                        <animate attributeName="r" values="4;8;4" dur="2s" repeatCount="indefinite" />
-                        <animate attributeName="opacity" values="1;0.5;1" dur="2s" repeatCount="indefinite" />
-                    </circle>
-                    <circle cx={originPos.x} cy={originPos.y} r="3" fill="#fff" />
-                </svg>
-
-                {/* Tooltip Overlay */}
-                {hoveredRoute && (
-                    <div
-                        style={{
-                            position: 'absolute',
-                            left: tooltipPos.x,
-                            top: tooltipPos.y,
-                            background: 'rgba(15, 23, 42, 0.9)',
-                            backdropFilter: 'blur(4px)',
-                            border: '1px solid var(--glass-border)',
-                            padding: '8px 12px',
-                            borderRadius: 8,
-                            pointerEvents: 'none',
-                            zIndex: 10,
-                            boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
-                            transform: 'translate(-50%, -100%)',
-                        }}
-                    >
-                        <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#fff' }}>{hoveredRoute.iata}</div>
-                        <div style={{ fontSize: '0.8rem', color: hoveredRoute.color }}>
-                            {hoveredRoute.count} flyg ({hoveredRoute.label})
-                        </div>
-                    </div>
-                )}
-
-                {/* Legend */}
-                <div style={{
-                    position: 'absolute',
-                    bottom: 15,
-                    left: 15,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 5,
-                    fontSize: '0.7rem',
-                    background: 'rgba(0,0,0,0.6)',
-                    padding: '8px 12px',
-                    borderRadius: 8,
-                    pointerEvents: 'none'
-                }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981' }} /> Populär (+70%)
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#3b82f6' }} /> Vanlig
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#94a3b8' }} /> Sällsynt
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-});
-
-RouteMap.displayName = 'RouteMap';
-
 // ============================================================================
 // MAIN COMPONENT
 // ============================================================================
 
 const DateRangeInput = React.memo(({ startDate, endDate, onStartChange, onEndChange }) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255,255,255,0.05)', padding: '5px 12px', borderRadius: 20, border: '1px solid var(--glass-border)' }}>
-        <input
-            type="date"
-            value={startDate}
-            onChange={onStartChange}
-            aria-label="Startdatum"
-            style={{ background: 'none', border: 'none', color: 'white', fontSize: '0.8rem', outline: 'none', cursor: 'pointer', maxWidth: 110 }}
-        />
-        <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>&rarr;</span>
-        <input
-            type="date"
-            value={endDate}
-            onChange={onEndChange}
-            min={startDate}
-            aria-label="Slutdatum"
-            style={{ background: 'none', border: 'none', color: 'white', fontSize: '0.8rem', outline: 'none', cursor: 'pointer', maxWidth: 110 }}
-        />
+    <div style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '2rem', // Increased gap between Från and Till
+        background: 'rgba(255,255,255,0.08)',
+        padding: '8px 20px',
+        borderRadius: '24px',
+        border: '1px solid var(--glass-border)',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+    }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>Från</span>
+            <input
+                type="date"
+                value={startDate}
+                onChange={onStartChange}
+                aria-label="Startdatum"
+                style={{ background: 'none', border: 'none', color: 'white', fontSize: '0.85rem', outline: 'none', cursor: 'pointer', width: '135px' }}
+            />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 600 }}>Till</span>
+            <input
+                type="date"
+                value={endDate}
+                onChange={onEndChange}
+                min={startDate}
+                aria-label="Slutdatum"
+                style={{ background: 'none', border: 'none', color: 'white', fontSize: '0.85rem', outline: 'none', cursor: 'pointer', width: '135px' }}
+            />
+        </div>
     </div>
 ));
 
@@ -494,8 +304,6 @@ export const AirportStatistics = ({
         };
     }, [filteredFlights]);
 
-    // Handlers
-    // Removed unused handlers
 
     // Early return if no flights
     if (!flights?.length) return null;
@@ -504,20 +312,18 @@ export const AirportStatistics = ({
         <div id="airport-stats" className="glass-card fade-in" style={STYLES.container}>
             {/* Header */}
             <div style={STYLES.header}>
-                <h2 style={STYLES.title}>
-                    <span style={{ fontSize: '1.5rem', marginRight: 10 }}>📊</span>
-                    <div>
+                <div style={STYLES.titleSection}>
+                    <h2 style={STYLES.title}>
+                        <span>📊</span>
                         Statistik för {airportIata}
-                        <div style={{ marginTop: 5 }}>
-                            <DateRangeInput
-                                startDate={startDate}
-                                endDate={endDate}
-                                onStartChange={onStartDateChange}
-                                onEndChange={onEndDateChange}
-                            />
-                        </div>
-                    </div>
-                </h2>
+                    </h2>
+                    <DateRangeInput
+                        startDate={startDate}
+                        endDate={endDate}
+                        onStartChange={onStartDateChange}
+                        onEndChange={onEndDateChange}
+                    />
+                </div>
 
                 <div style={STYLES.filterContainer}>
                     <input
