@@ -109,7 +109,7 @@ const FavoriteButton = React.memo(({ isFavorite, onClick }) => (
 FavoriteButton.displayName = 'FavoriteButton';
 
 /** Status badge display */
-const StatusBadge = React.memo(({ status }) => {
+export const StatusBadge = React.memo(({ status }) => {
     const getBadgeStyle = () => {
         const isLanded = status?.includes('Landat');
         return {
@@ -128,7 +128,7 @@ const StatusBadge = React.memo(({ status }) => {
 StatusBadge.displayName = 'StatusBadge';
 
 /** Single flight card */
-const FlightCard = React.memo(({ flight, isFavorite, onSelect, onToggleFavorite }) => {
+export const FlightCard = React.memo(({ flight, isFavorite, onSelect, onToggleFavorite }) => {
     const handleFavoriteClick = useCallback(
         (e) => {
             e.stopPropagation();

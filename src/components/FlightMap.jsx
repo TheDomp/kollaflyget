@@ -41,15 +41,19 @@ const originIcon = new L.Icon({
 const MapController = ({ bounds }) => {
     const map = useMap();
     useEffect(() => {
-        if (bounds && bounds.length > 0) {
-            map.fitBounds(bounds, { padding: [50, 50] });
-        }
+        // Small delay to ensure container is fully rendered
+        setTimeout(() => {
+            map.invalidateSize();
+            if (bounds && bounds.length > 0) {
+                map.fitBounds(bounds, { padding: [50, 50] });
+            }
+        }, 100);
     }, [bounds, map]);
     return null;
 };
 
 // Main FlightMap Component
-const FlightMap = ({ origin, originIata, destinations }) => {
+const FlightMap = ({ origin, originIata, destinations, onDestinationSelect }) => {
 
     // Convert destinations object to array of routes
     const routes = useMemo(() => {
@@ -59,6 +63,7 @@ const FlightMap = ({ origin, originIata, destinations }) => {
             lat: dest.lat,
             lng: dest.lng,
             count: dest.count,
+            popularity: dest.popularity, // ensure popularity is passed
             color: dest.popularity > 0.7 ? '#10b981' : dest.popularity > 0.3 ? '#3b82f6' : '#94a3b8'
         }));
     }, [origin, destinations]);
@@ -87,10 +92,16 @@ const FlightMap = ({ origin, originIata, destinations }) => {
                 style={{ height: '100%', width: '100%' }}
                 scrollWheelZoom={false}
             >
-                {/* Dark Theme Tiles (CartoDB Dark Matter) */}
+                {/* Satellite Imagery (Esri World Imagery) */}
                 <TileLayer
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-                    url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                    attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+                    url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                />
+                {/* Labels overlay (Esri World Boundaries & Places) */}
+                <TileLayer
+                    attribution='&copy; Esri &mdash; Sources: Esri, USGS, NOAA'
+                    url="https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+                    opacity={0.8}
                 />
 
                 <MapController bounds={bounds} />
@@ -118,10 +129,21 @@ const FlightMap = ({ origin, originIata, destinations }) => {
                                 dashArray: '5, 10' // Dashed lines for flight feel
                             }}
                         />
-                        <Marker position={[route.lat, route.lng]} icon={dotIcon}>
+                        <Marker
+                            position={[route.lat, route.lng]}
+                            icon={dotIcon}
+                            eventHandlers={{
+                                click: () => onDestinationSelect && onDestinationSelect(route.iata),
+                                mouseover: (e) => e.target.openPopup(),
+                                mouseout: (e) => e.target.closePopup()
+                            }}
+                        >
                             <Popup>
-                                <strong>{route.iata}</strong><br />
-                                {route.count} flyg
+                                <div style={{ textAlign: 'center' }}>
+                                    <strong style={{ fontSize: '1.1em' }}>{route.iata}</strong><br />
+                                    <span style={{ color: '#10b981', fontWeight: 600 }}>{route.count} flights</span><br />
+                                    <span style={{ fontSize: '0.8em', color: '#666', marginTop: 4, display: 'block' }}>Klicka för att se flyg</span>
+                                </div>
                             </Popup>
                         </Marker>
                     </React.Fragment>

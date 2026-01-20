@@ -4,8 +4,11 @@
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { COUNTRY_MAPPING, DESTINATION_COORDS } from '../services/swedaviaApi';
+import { createPortal } from 'react-dom';
+import { COUNTRY_MAPPING, DESTINATION_COORDS, swedaviaService } from '../services/swedaviaApi';
 import FlightMap from './FlightMap';
+import { FlightCard } from './FlightList';
+import { FlightDetailsModal } from './FlightDetailsModal';
 
 // ============================================================================
 // CONSTANTS
@@ -96,6 +99,47 @@ const STYLES = {
         borderRadius: 3,
         overflow: 'hidden',
     },
+    routeModalOverlay: {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0,0,0,0.8)',
+        backdropFilter: 'blur(10px)',
+        zIndex: 1000,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1rem',
+    },
+    routeModalCard: {
+        width: '100%',
+        maxWidth: 600,
+        maxHeight: '80vh',
+        display: 'flex',
+        flexDirection: 'column',
+        position: 'relative',
+        background: 'rgba(20, 20, 25, 0.95)',
+        border: '1px solid hsla(var(--primary-h), var(--primary-s), 50%, 0.3)',
+        borderRadius: 16,
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+    },
+    closeButton: {
+        position: 'absolute',
+        top: '1rem',
+        right: '1rem',
+        background: 'rgba(255,255,255,0.1)',
+        border: '1px solid var(--glass-border)',
+        color: 'white',
+        cursor: 'pointer',
+        padding: 8,
+        borderRadius: '50%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 10,
+    },
 };
 
 // ============================================================================
@@ -117,9 +161,9 @@ const filterFlightsByQuery = (flights, query) => {
         .flatMap(([, keywords]) => keywords.map((k) => k.toLowerCase()));
 
     return flights.filter((f) => {
-        const dest = f.destination.toLowerCase();
-        const airline = f.airline.toLowerCase();
-        const id = f.id.toLowerCase();
+        const dest = (f.destination || '').toLowerCase();
+        const airline = (f.airline || '').toLowerCase();
+        const id = (f.id || '').toLowerCase();
 
         return (
             id.includes(q) ||
@@ -131,16 +175,30 @@ const filterFlightsByQuery = (flights, query) => {
 };
 
 /**
- * Calculates status distribution from flights.
+ * Calculates status distribution from flights using UTC timestamps for accurate delay detection.
  * @param {Object[]} flights - Flight array.
  * @returns {Object} Status counts.
  */
 const calculateStatusCounts = (flights) =>
     flights.reduce(
         (acc, f) => {
-            const s = f.status.toLowerCase();
+            const s = (f.status || '').toLowerCase();
+
+            // Accurate delay detection using UTC timestamps (threshold: 15 mins)
+            let isDelayed = s.includes('delayed') || s.includes('försenat');
+
+            if (!isDelayed && f.scheduledUtc && (f.actualUtc || f.estimatedUtc)) {
+                const scheduled = new Date(f.scheduledUtc).getTime();
+                const actual = new Date(f.actualUtc || f.estimatedUtc).getTime();
+                const diffMinutes = (actual - scheduled) / (1000 * 60);
+
+                if (diffMinutes >= 15) {
+                    isDelayed = true;
+                }
+            }
+
             if (s.includes('landat')) acc.landed++;
-            else if (s.includes('delayed') || s.includes('försenat')) acc.delayed++;
+            else if (isDelayed) acc.delayed++;
             else if (s.includes('cancelled') || s.includes('inställt')) acc.cancelled++;
             else acc.onTime++;
             return acc;
@@ -171,24 +229,6 @@ const getTopItems = (items, key, limit = 5) => {
 // SUB-COMPONENTS
 // ============================================================================
 
-/** Stats icon SVG */
-const StatsIcon = () => (
-    <svg
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-    >
-        <line x1="18" y1="20" x2="18" y2="10" />
-        <line x1="12" y1="20" x2="12" y2="4" />
-        <line x1="6" y1="20" x2="6" y2="14" />
-    </svg>
-);
-
 /** Single stat card */
 const StatCard = React.memo(({ value, label, color = 'var(--primary)' }) => (
     <div className="glass-card" style={STYLES.statCard}>
@@ -200,9 +240,22 @@ const StatCard = React.memo(({ value, label, color = 'var(--primary)' }) => (
 StatCard.displayName = 'StatCard';
 
 /** Progress bar item for lists */
-const ProgressItem = React.memo(({ label, count, maxCount, color = 'var(--primary)' }) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-        <div style={{ flex: 1, fontSize: '0.9rem' }}>{label}</div>
+const ProgressItem = React.memo(({ label, count, maxCount, color = 'var(--primary)', onClick }) => (
+    <div
+        onClick={onClick}
+        style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '1rem',
+            cursor: onClick ? 'pointer' : 'default',
+            padding: '4px 8px',
+            borderRadius: 8,
+            transition: 'background 0.2s ease',
+        }}
+        onMouseEnter={(e) => onClick && (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
+        onMouseLeave={(e) => onClick && (e.currentTarget.style.background = 'transparent')}
+    >
+        <div style={{ flex: 1, fontSize: '0.9rem', fontWeight: 500 }}>{label}</div>
         <div style={STYLES.progressBar}>
             <div
                 style={{
@@ -212,226 +265,88 @@ const ProgressItem = React.memo(({ label, count, maxCount, color = 'var(--primar
                 }}
             />
         </div>
-        <div style={{ fontSize: '0.8rem', minWidth: 20 }}>{count}</div>
+        <div style={{ fontSize: '0.8rem', minWidth: 25, textAlign: 'right', fontWeight: 600 }}>{count}</div>
     </div>
 ));
 
 ProgressItem.displayName = 'ProgressItem';
 
-/**
- * Interactive Flight Route Map with Tooltips and World Projection
- */
-const RouteMap = React.memo(({ originIata, flights }) => {
-    const [hoveredRoute, setHoveredRoute] = useState(null);
-    const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+const CloseIcon = () => (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18" />
+        <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+);
 
-    // World Map Projection (Equirectangular) mapping to 800x450
-    const getPos = useCallback((lat, lng) => ({
-        x: (lng + 180) * (800 / 360),
-        y: (90 - lat) * (450 / 180),
-    }), []);
+/** Modal for list of flights on a route */
+const RouteFlightsModal = ({ route, flights, onClose, onSelectFlight, favorites, onToggleFavorite }) => {
+    return createPortal(
+        <div className="fade-in" style={STYLES.routeModalOverlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+            <div style={STYLES.routeModalCard}>
 
-    const origin = useMemo(() => DESTINATION_COORDS[originIata], [originIata]);
-
-    const routes = useMemo(() => {
-        if (!origin) return [];
-        const counts = flights.reduce((acc, f) => {
-            const dest = f.type === 'Arrival' ? f.originIata : f.destinationIata;
-            if (dest && dest !== originIata) {
-                acc[dest] = (acc[dest] || 0) + 1;
-            }
-            return acc;
-        }, {});
-
-        const maxCount = Math.max(...Object.values(counts), 1);
-
-        return Object.entries(counts)
-            .map(([iata, count]) => {
-                const coords = DESTINATION_COORDS[iata];
-                if (!coords) return null;
-
-                const start = getPos(origin.lat, origin.lng);
-                const end = getPos(coords.lat, coords.lng);
-
-                // Curve calculation
-                const dx = end.x - start.x;
-                const dy = end.y - start.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                const midX = (start.x + end.x) / 2;
-                const midY = (start.y + end.y) / 2 - dist * 0.2; // Arc height based on distance
-
-                const popularity = count / maxCount;
-                let color = '#94a3b8'; // Grey (Low)
-                let label = 'Sällsynt';
-
-                if (popularity > 0.7) {
-                    color = '#10b981'; // Green (Popular)
-                    label = 'Populär';
-                } else if (popularity > 0.3) {
-                    color = '#3b82f6'; // Blue (Medium)
-                    label = 'Vanlig';
-                }
-
-                return { iata, count, start, end, midX, midY, color, label, popularity };
-            })
-            .filter(Boolean);
-    }, [origin, originIata, flights, getPos]);
-
-    const handleMouseEnter = useCallback((e, route) => {
-        const rect = e.target.getBoundingClientRect();
-        setTooltipPos({
-            x: e.clientX - rect.left + 20,
-            y: e.clientY - rect.top - 40
-        });
-        setHoveredRoute(route);
-    }, []);
-
-    const handleMouseLeave = useCallback(() => {
-        setHoveredRoute(null);
-    }, []);
-
-    if (!origin) return null;
-
-    const originPos = getPos(origin.lat, origin.lng);
-
-    return (
-        <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '2rem' }}>
-            <h3 style={{ marginBottom: '1.5rem', fontSize: '0.9rem', color: 'var(--text-dim)' }}>
-                FLYGRUTTER FRÅN {originIata}
-            </h3>
-
-            <div className="route-map-container" style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: 'radial-gradient(ellipse at center, #1e293b 0%, #0f172a 100%)', borderRadius: 12, overflow: 'hidden' }}>
-                <svg width="100%" height="100%" viewBox="0 0 800 450" style={{ display: 'block' }}>
-                    <defs>
-                        <filter id="glow">
-                            <feGaussianBlur stdDeviation="2.5" result="coloredBlur" />
-                            <feMerge>
-                                <feMergeNode in="coloredBlur" />
-                                <feMergeNode in="SourceGraphic" />
-                            </feMerge>
-                        </filter>
-                    </defs>
-
-                    {/* World Map Dots Background */}
-                    {Object.entries(DESTINATION_COORDS).map(([code, coords]) => {
-                        const pos = getPos(coords.lat, coords.lng);
-                        return (
-                            <circle
-                                key={code}
-                                cx={pos.x}
-                                cy={pos.y}
-                                r={1.5}
-                                fill="rgba(255, 255, 255, 0.15)"
-                            />
-                        );
-                    })}
-
-                    {/* Routes */}
-                    {routes.map((route) => (
-                        <g key={route.iata}>
-                            <path
-                                d={`M ${route.start.x} ${route.start.y} Q ${route.midX} ${route.midY} ${route.end.x} ${route.end.y}`}
-                                fill="none"
-                                stroke={route.color}
-                                strokeWidth={hoveredRoute?.iata === route.iata ? 3 : 1 + route.popularity * 2}
-                                strokeLinecap="round"
-                                strokeOpacity={hoveredRoute && hoveredRoute.iata !== route.iata ? 0.2 : 0.8}
-                                style={{
-                                    transition: 'all 0.3s ease',
-                                    cursor: 'pointer'
-                                }}
-                                onMouseEnter={(e) => handleMouseEnter(e, route)}
-                                onMouseLeave={handleMouseLeave}
-                            />
-                            {/* Hit area for easier hovering */}
-                            <path
-                                d={`M ${route.start.x} ${route.start.y} Q ${route.midX} ${route.midY} ${route.end.x} ${route.end.y}`}
-                                fill="none"
-                                stroke="transparent"
-                                strokeWidth="15"
-                                style={{ cursor: 'pointer' }}
-                                onMouseEnter={(e) => handleMouseEnter(e, route)}
-                                onMouseLeave={handleMouseLeave}
-                            />
-
-                            {/* Destination Dot */}
-                            <circle
-                                cx={route.end.x}
-                                cy={route.end.y}
-                                r={hoveredRoute?.iata === route.iata ? 5 : 3}
-                                fill={route.color}
-                                style={{ transition: 'all 0.3s ease' }}
-                            />
-                        </g>
-                    ))}
-
-                    {/* Origin Dot (Pulse effect) */}
-                    <circle cx={originPos.x} cy={originPos.y} r="4" fill="var(--primary)">
-                        <animate attributeName="r" values="4;8;4" dur="2s" repeatCount="indefinite" />
-                        <animate attributeName="opacity" values="1;0.5;1" dur="2s" repeatCount="indefinite" />
-                    </circle>
-                    <circle cx={originPos.x} cy={originPos.y} r="3" fill="#fff" />
-                </svg>
-
-                {/* Tooltip Overlay */}
-                {hoveredRoute && (
-                    <div
-                        style={{
-                            position: 'absolute',
-                            left: tooltipPos.x,
-                            top: tooltipPos.y,
-                            background: 'rgba(15, 23, 42, 0.9)',
-                            backdropFilter: 'blur(4px)',
-                            border: '1px solid var(--glass-border)',
-                            padding: '8px 12px',
-                            borderRadius: 8,
-                            pointerEvents: 'none',
-                            zIndex: 10,
-                            boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
-                            transform: 'translate(-50%, -100%)',
-                        }}
-                    >
-                        <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#fff' }}>{hoveredRoute.iata}</div>
-                        <div style={{ fontSize: '0.8rem', color: hoveredRoute.color }}>
-                            {hoveredRoute.count} flyg ({hoveredRoute.label})
-                        </div>
-                    </div>
-                )}
-
-                {/* Legend */}
-                <div style={{
-                    position: 'absolute',
-                    bottom: 15,
-                    left: 15,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 5,
-                    fontSize: '0.7rem',
-                    background: 'rgba(0,0,0,0.6)',
-                    padding: '8px 12px',
-                    borderRadius: 8,
-                    pointerEvents: 'none'
-                }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981' }} /> Populär (+70%)
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#3b82f6' }} /> Vanlig
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#94a3b8' }} /> Sällsynt
+                {/* Header */}
+                <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--glass-border)' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Flyg till/från {route}</h3>
+                    <div style={{ fontSize: '0.9rem', color: 'var(--text-dim)', marginTop: '0.2rem' }}>
+                        {flights.length} flyg hittades
                     </div>
                 </div>
+
+                <button onClick={onClose} style={STYLES.closeButton}>
+                    <CloseIcon />
+                </button>
+
+                {/* List */}
+                <div style={{ flex: 1, overflowY: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                    {flights.map(flight => (
+                        <div key={flight.id} style={{ transform: 'scale(0.98)' }}>
+                            <FlightCard
+                                flight={flight}
+                                isFavorite={favorites.includes(flight.id)}
+                                onSelect={onSelectFlight}
+                                onToggleFavorite={onToggleFavorite}
+                            />
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>,
+        document.body
+    );
+};
+
+
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
+
+const DataFeedback = React.memo(({ metadata }) => {
+    if (!metadata || metadata.missingDates.length === 0) return null;
+
+    return (
+        <div style={{
+            background: 'rgba(245, 158, 11, 0.1)',
+            border: '1px solid rgba(245, 158, 11, 0.3)',
+            borderRadius: 12,
+            padding: '1rem',
+            marginBottom: '1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '1rem',
+            color: '#f59e0b',
+            fontSize: '0.9rem'
+        }}>
+            <span style={{ fontSize: '1.2rem' }}>⚠️</span>
+            <div>
+                <strong>Information:</strong> Data saknas för vissa datum i ditt valda intervall
+                ({metadata.missingDates.join(', ')}).
+                Swedavia sparar oftast bara data för de senaste 24-48 timmarna.
             </div>
         </div>
     );
 });
 
-RouteMap.displayName = 'RouteMap';
-
-// ============================================================================
-// MAIN COMPONENT
-// ============================================================================
+DataFeedback.displayName = 'DataFeedback';
 
 const DateRangeInput = React.memo(({ startDate, endDate, onStartChange, onEndChange }) => (
     <div style={{
@@ -486,9 +401,18 @@ export const AirportStatistics = ({
     startDate,
     endDate,
     onStartDateChange,
-    onEndDateChange
+    onEndDateChange,
+    loading
 }) => {
     const [filter, setFilter] = useState('');
+    const [selectedRoute, setSelectedRoute] = useState(null);
+    const [selectedFlight, setSelectedFlight] = useState(null);
+    const [favorites, setFavorites] = useState(() => swedaviaService.getFavorites());
+
+    const handleToggleFavorite = useCallback((flightId) => {
+        const newFavs = swedaviaService.toggleFavorite(flightId);
+        setFavorites([...newFavs]);
+    }, []);
 
     // Filter flights based on query
     const filteredFlights = useMemo(
@@ -496,9 +420,26 @@ export const AirportStatistics = ({
         [flights, filter]
     );
 
+    const routeFlights = useMemo(() => {
+        if (!selectedRoute) return [];
+        const normalizedRoute = selectedRoute.toLowerCase().trim();
+        return filteredFlights.filter(f => {
+            const originIata = (f.originIata || '').toLowerCase();
+            const destIata = (f.destinationIata || '').toLowerCase();
+            const destName = (f.destination || '').toLowerCase();
+
+            return (
+                originIata === normalizedRoute ||
+                destIata === normalizedRoute ||
+                destName.includes(normalizedRoute) ||
+                normalizedRoute.includes(destName)
+            );
+        });
+    }, [selectedRoute, filteredFlights]);
+
     // Calculate statistics
     const stats = useMemo(() => {
-        if (filteredFlights.length === 0) return null;
+        if (!filteredFlights || filteredFlights.length === 0) return null;
 
         const statusCounts = calculateStatusCounts(filteredFlights);
         const delayRate =
@@ -516,11 +457,36 @@ export const AirportStatistics = ({
     }, [filteredFlights]);
 
 
-    // Early return if no flights
-    if (!flights?.length) return null;
+    // Early return if no flights AND no metadata (to avoid hiding the warning)
+    if (!flights?.length && (!flights?._metadata || flights?._metadata.missingDates.length === 0)) return null;
 
     return (
-        <div id="airport-stats" className="glass-card fade-in" style={STYLES.container}>
+        <div id="airport-stats" className="glass-card fade-in" style={{ ...STYLES.container, position: 'relative' }}>
+            {loading && (
+                <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(20, 25, 35, 0.6)',
+                    backdropFilter: 'blur(4px)',
+                    zIndex: 20,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: 16
+                }}>
+                    <div style={{
+                        width: 40,
+                        height: 40,
+                        border: '3px solid var(--glass-border)',
+                        borderTopColor: 'var(--primary)',
+                        borderRadius: '50%',
+                        animation: 'spin 1s linear infinite'
+                    }} />
+                </div>
+            )}
             {/* Header */}
             <div style={STYLES.header}>
                 <div style={STYLES.titleSection}>
@@ -552,6 +518,13 @@ export const AirportStatistics = ({
                 </div>
             </div>
 
+            {/* Debug Element */}
+            <div id="debug-metadata" style={{ display: 'none' }} data-metadata={JSON.stringify(flights._metadata || {})}>
+                {JSON.stringify(flights._metadata || {})}
+            </div>
+
+            <DataFeedback metadata={flights._metadata} />
+
             {/* Content */}
             {!stats ? (
                 <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-dim)' }}>
@@ -560,7 +533,35 @@ export const AirportStatistics = ({
             ) : (
                 <>
                     {/* Route Map */}
-                    <RouteMap originIata={airportIata} flights={filteredFlights} />
+                    <div className="glass-card" style={{ padding: '0', marginBottom: '2rem', borderRadius: 12, overflow: 'hidden' }}>
+                        <div style={{ padding: '1rem', borderBottom: '1px solid var(--glass-border)' }}>
+                            <h3 style={{ ...STYLES.listHeader, margin: 0, fontSize: '0.9rem', color: 'var(--text-dim)' }}>FLYGRUTTER FRÅN {airportIata}</h3>
+                        </div>
+                        <FlightMap
+                            origin={DESTINATION_COORDS[airportIata]}
+                            originIata={airportIata}
+                            destinations={
+                                // Prepare data for map
+                                (() => {
+                                    const counts = filteredFlights.reduce((acc, f) => {
+                                        const dest = f.type === 'Arrival' ? f.originIata : f.destinationIata;
+                                        if (dest && dest !== airportIata && DESTINATION_COORDS[dest]) {
+                                            acc[dest] = (acc[dest] || 0) + 1;
+                                        }
+                                        return acc;
+                                    }, {});
+                                    const max = Math.max(...Object.values(counts), 1);
+                                    return Object.entries(counts).map(([iata, count]) => ({
+                                        iata,
+                                        count,
+                                        ...DESTINATION_COORDS[iata],
+                                        popularity: count / max
+                                    }));
+                                })()
+                            }
+                            onDestinationSelect={setSelectedRoute}
+                        />
+                    </div>
 
                     {/* Stats Cards */}
                     <div style={STYLES.statsGrid}>
@@ -581,13 +582,16 @@ export const AirportStatistics = ({
                         {/* Destinations */}
                         <div>
                             <h3 style={STYLES.listHeader}>Toppdestinationer</h3>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                                 {stats.topDestinations.map(([dest, count]) => (
                                     <ProgressItem
                                         key={dest}
                                         label={dest}
                                         count={count}
                                         maxCount={stats.topDestinations[0][1]}
+                                        onClick={() => {
+                                            setSelectedRoute(dest);
+                                        }}
                                     />
                                 ))}
                             </div>
@@ -596,7 +600,7 @@ export const AirportStatistics = ({
                         {/* Airlines */}
                         <div>
                             <h3 style={STYLES.listHeader}>Flygbolag</h3>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                                 {stats.topAirlines.map(([airline, count]) => (
                                     <ProgressItem
                                         key={airline}
@@ -604,12 +608,32 @@ export const AirportStatistics = ({
                                         count={count}
                                         maxCount={stats.topAirlines[0][1]}
                                         color="#f59e0b"
+                                        onClick={() => setFilter(airline)}
                                     />
                                 ))}
                             </div>
                         </div>
                     </div>
                 </>
+            )}
+
+            {/* Modals */}
+            {selectedRoute && (
+                <RouteFlightsModal
+                    route={selectedRoute}
+                    flights={routeFlights}
+                    onClose={() => setSelectedRoute(null)}
+                    onSelectFlight={setSelectedFlight}
+                    favorites={favorites}
+                    onToggleFavorite={handleToggleFavorite}
+                />
+            )}
+
+            {selectedFlight && (
+                <FlightDetailsModal
+                    flight={selectedFlight}
+                    onClose={() => setSelectedFlight(null)}
+                />
             )}
         </div>
     );

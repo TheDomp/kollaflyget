@@ -47,7 +47,7 @@ const STYLES = {
         width: '100%',
         height: '100%',
         border: 0,
-        filter: 'invert(90%) hue-rotate(180deg) brightness(95%) contrast(90%)', // Semi-dark mode map
+        // Removed inversion filter to show natural satellite colors
     },
     footer: {
         padding: '1rem 2rem',
@@ -95,7 +95,7 @@ export const AirportMap = ({ airportIata }) => {
 
     const googleMapEmbedUrl = `https://www.google.com/maps?q=${encodeURIComponent(
         mode === 'place' ? airport.name : `${mode} near ${airport.name}`
-    )}&output=embed`;
+    )}&t=k&output=embed`;
 
     const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${airport.lat},${airport.lng}`;
 

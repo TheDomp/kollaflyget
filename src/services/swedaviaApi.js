@@ -112,6 +112,15 @@ export const DESTINATION_COORDS = Object.freeze({
   'SIN': { lat: 1.3644, lng: 103.9915 },  // Singapore
   'ICN': { lat: 37.4602, lng: 126.4407 }, // Seoul
   'DEL': { lat: 28.5562, lng: 77.1000 },  // Delhi
+  'NAP': { lat: 40.8860, lng: 14.2908 },  // Naples
+  'NCE': { lat: 43.6653, lng: 7.2150 },   // Nice
+  'LIS': { lat: 38.7742, lng: -9.1342 },  // Lisbon
+  'DUB': { lat: 53.4264, lng: -6.2499 },  // Dublin
+  'PRG': { lat: 50.1008, lng: 14.2600 },  // Prague
+  'WAW': { lat: 52.1657, lng: 20.9671 },  // Warsaw
+  'BUD': { lat: 47.4333, lng: 19.2333 },  // Budapest
+  'MAN': { lat: 53.3588, lng: -2.2727 },  // Manchester
+  'EDI': { lat: 55.9508, lng: -3.3615 },  // Edinburgh
 });
 
 /** @private */
@@ -192,14 +201,17 @@ const transformFlight = (rawFlight, type) => {
   const timeData = isArrival ? rawFlight.arrivalTime : rawFlight.departureTime;
 
   return {
-    id: rawFlight.flightId,
+    id: rawFlight.flightId ?? 'Unknown',
     airline: rawFlight.airlineOperator?.name ?? 'Unknown',
-    destination: isArrival
+    destination: (isArrival
       ? rawFlight.departureAirportSwedish
-      : rawFlight.arrivalAirportSwedish,
+      : rawFlight.arrivalAirportSwedish) ?? 'Okänd Destination',
     originIata: rawFlight.flightLegIdentifier?.departureAirportIata,
     destinationIata: rawFlight.flightLegIdentifier?.arrivalAirportIata,
     time: timeData?.scheduledUtc?.split('T')[1]?.substring(0, 5) ?? '--:--',
+    scheduledUtc: timeData?.scheduledUtc || null,
+    estimatedUtc: timeData?.estimatedUtc || null,
+    actualUtc: timeData?.actualUtc || null,
     status: rawFlight.locationAndStatus?.flightLegStatusSwedish ?? 'Okänd',
     gate: rawFlight.locationAndStatus?.gate ?? '-',
     type: isArrival ? 'Arrival' : 'Departure',
@@ -260,6 +272,7 @@ export const swedaviaService = {
     const path = `/flightinfo/v2/${airportIata}/${type}/${targetDate}`;
 
     try {
+      console.log('swedaviaService.getFlights called for:', { airportIata, type, targetDate });
       const data = await fetchWithProxy(path);
       return (data.flights ?? []).map((f) => transformFlight(f, type));
     } catch (error) {
@@ -372,18 +385,45 @@ export const swedaviaService = {
     let current = new Date(startDate);
     const end = new Date(endDate);
 
-    // Limit to 7 days to avoid API abuse
+    // Limit to 14 days to avoid excessive API calls
     let count = 0;
-    while (current <= end && count < 7) {
+    while (current <= end && count < 14) {
       dates.push(new Date(current).toISOString().split('T')[0]);
       current.setDate(current.getDate() + 1);
       count++;
     }
 
     try {
-      const promises = dates.map(date => swedaviaService.getFlights(airportIata, type, date));
+      const promises = dates.map(async (date) => {
+        try {
+          return await swedaviaService.getFlights(airportIata, type, date);
+        } catch (e) {
+          console.warn(`Failed to fetch flights for ${date}:`, e.message || 'Unknown error');
+          return [];
+        }
+      });
       const results = await Promise.all(promises);
-      return results.flat();
+
+      const aggregatedFlights = [];
+      const statsMetadata = {
+        totalDates: dates.length,
+        datesWithData: 0,
+        missingDates: [],
+      };
+
+      results.forEach((flights, index) => {
+        if (flights.length > 0) {
+          aggregatedFlights.push(...flights);
+          statsMetadata.datesWithData++;
+        } else {
+          statsMetadata.missingDates.push(dates[index]);
+        }
+      });
+
+      // Attach metadata to the array (it remains an array for backward compatibility)
+      aggregatedFlights._metadata = statsMetadata;
+      console.log('getFlightsInRange returning with metadata:', statsMetadata);
+      return aggregatedFlights;
     } catch (error) {
       console.error('Error fetching flight range:', error);
       throw error;

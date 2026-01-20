@@ -202,13 +202,20 @@ function App() {
   }, []);
 
   // Determine if we should show statistics
-  const showStatistics = currentAirport && flights.length > 0;
+  const showStatistics = useMemo(() => {
+    // Early return if no flights AND no metadata (to avoid hiding the warning)
+    if (!flights?.length && (!flights?._metadata || flights?._metadata.missingDates.length === 0)) {
+      return false;
+    }
+    return currentAirport && (flights.length > 0 || loading);
+  }, [currentAirport, flights, loading]);
 
   /**
    * Handles airport selection and fetches flight data.
    */
   const handleAirportSelect = useCallback(
     async (iata, start = startDate, end = endDate) => {
+      console.log('handleAirportSelect called with:', { iata, start, end, type });
       setCurrentAirport(iata);
       setLoading(true);
       setError(null);
@@ -220,13 +227,16 @@ function App() {
       try {
         let data;
         if (start === end) {
+          console.log('App.jsx: Fetching single date', start);
           data = await swedaviaService.getFlights(iata, type, start);
         } else {
+          console.log('App.jsx: Fetching range', start, end);
           data = await swedaviaService.getFlightsInRange(iata, type, start, end);
         }
 
+        console.log('App.jsx received data:', data, 'Metadata:', data._metadata);
         setFlights(data);
-        if (data.length === 0) {
+        if (data.length === 0 && (!data._metadata || data._metadata.missingDates.length === data._metadata.totalDates)) {
           setError('Inga flyg hittades för valda parametrar.');
         }
       } catch (e) {
@@ -374,6 +384,7 @@ function App() {
           {showStatistics && (
             <AirportStatistics
               flights={flights}
+              loading={loading}
               airportIata={currentAirport}
               startDate={startDate}
               endDate={endDate}

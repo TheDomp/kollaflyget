@@ -52,8 +52,11 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   position: relative;
-  perspective: 1000px;
   transition: background-color 1.5s ease-in-out;
+}
+
+.app-root {
+  perspective: 1000px;
 }
 
 body::before {

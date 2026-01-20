@@ -31,7 +31,7 @@ test.describe('Airport Map Stability', () => {
         // 5. Check if map is visible initially
         // Map is rendered in a div with some specific content probably.
         // AirportMap uses Leaflet. Leaflet container has class 'leaflet-container'.
-        await expect(page.locator('svg[viewBox="0 0 800 450"]')).toBeVisible();
+        await expect(page.locator('.leaflet-container')).toBeVisible();
 
         // 6. Change date in statistics
         // The date input is in AirportStatistics -> DateRangeInput
@@ -63,14 +63,14 @@ test.describe('Airport Map Stability', () => {
         // If the bug exists (map unmounts when loading=true), this will FAIL.
         // We use isVisible() and then expect(true) to avoid Playwright's auto-retries for toBeVisible()
         // which might pass if the map reappears quickly after a flicker.
-        const isMapVisible = await page.locator('svg[viewBox="0 0 800 450"]').isVisible();
+        const isMapVisible = await page.locator('.leaflet-container').isVisible();
         expect(isMapVisible).toBe(true);
 
         // 10. Wait for the loading to complete and new data to appear
         await expect(page.getByTestId('loading-overlay')).not.toBeVisible({ timeout: 10000 });
 
         // Ensure the map is still visible after loading completes
-        await expect(page.locator('svg[viewBox="0 0 800 450"]')).toBeVisible();
+        await expect(page.locator('.leaflet-container')).toBeVisible();
 
         // 11. Ensure we are still at the Statistics section (scroll position maintained or restored)
         await expect(page.locator('#airport-stats')).toBeInViewport();
